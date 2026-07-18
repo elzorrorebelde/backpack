@@ -20,7 +20,8 @@ for keybinding ergonomics, on by default), pulse (pulse source line on display).
   :config
   ;; Hover documentation via eldoc (on by default, opt-out with -eldoc)
   (unless (gearp! :tools dape -eldoc)
-    (add-hook 'dape-mode-hook #'eldoc-mode))
+    (when (gearp! :tools eldoc)
+      (add-hook 'dape-mode-hook #'eldoc-mode)))
 
   ;; Repeat-mode for ergonomic keybinding chaining (on by default, opt-out with -repeat)
   (unless (gearp! :tools dape -repeat)
