@@ -236,6 +236,11 @@ skip recompilation when the upstream grammar has not changed.")
 ;; Initialize elpaca
 (backpack--ensure-elpaca)
 
+;; On Windows symlinks require elevated privileges or Developer Mode.
+;; Force elpaca to copy build files instead.
+(when backpack--system-windows-p
+  (elpaca-no-symlink-mode 1))
+
 (defvar backpack-after-init-hook nil
   "Abnormal hook for functions to be run after Backpack was initialized.
 This hook fires before packages are activated.  Packages registered via

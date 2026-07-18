@@ -179,11 +179,13 @@ This replicates what the elpaca installer does but without cloning."
     (dolist (file (directory-files repo-dir t "\\.elc?\\'"))
       (let ((dest (expand-file-name (file-name-nondirectory file) build-dir)))
         (unless (file-exists-p dest)
-          (if (fboundp 'make-symbolic-link)
-              (condition-case nil
-                  (make-symbolic-link file dest)
-                (error (copy-file file dest t)))
-            (copy-file file dest t)))))
+          (if backpack--system-windows-p
+              (copy-file file dest t)
+            (if (fboundp 'make-symbolic-link)
+                (condition-case nil
+                    (make-symbolic-link file dest)
+                  (error (copy-file file dest t)))
+              (copy-file file dest t))))))
     (message "Backpack: Elpaca built successfully")))
 
 (defun backpack--ensure-elpaca ()
