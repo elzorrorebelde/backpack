@@ -1,11 +1,7 @@
 ;;; dape.el --- Debug Adapter Protocol support via dape  -*- lexical-binding: t; -*-
 
 (leaf dape
-  :doc "Debug Adapter Protocol client for Emacs.
-Provides batteries-included debugging with breakpoints, variable explorer,
-REPL, memory editor, disassembly viewer, and hover documentation via eldoc.
-Flags: -eldoc (variable hover via eldoc, on by default), -repeat (repeat-mode
-for keybinding ergonomics, on by default), pulse (pulse source line on display)."
+  :doc "Debug Adapter Protocol client."
   :when (gearp! :tools dape)
   :ensure (dape :ref "c81da6a8bc75f3e7b2e61f949a44243a3b051765")
   :bind (("C-c d d" . dape))
