@@ -29,7 +29,7 @@
 (leaf js2-mode
   :doc "improved JavaScript editing with AST-based analysis"
   :when (gearp! :editing javascript js2)
-  :ensure (js2-mode :ref "e0c302872de4d26a9c1614fac8d6b94112b96307")
+  :ensure (js2-mode :ref "41d0e7f5ef51109c682016baa6fc6846e03e8517")
   :hook (js-mode-hook . js2-minor-mode))
 
 (leaf eglot

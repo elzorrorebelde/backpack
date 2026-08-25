@@ -9,7 +9,7 @@
 
 (leaf python-mode
   :doc "significant whitespace: where one wrong indent ruins your afternoon"
-  :ensure (python-mode :ref "5aaf8b386aa694429d997c6fd49772b0b359e514")
+  :ensure (python-mode :ref "dbbfaa9bbfa1e330f4d9ec81b3793fbb2a297ecd")
   :when (gearp! :editing python)
   :hook
   ((python-mode-hook python-ts-mode-hook) . electric-pair-local-mode)

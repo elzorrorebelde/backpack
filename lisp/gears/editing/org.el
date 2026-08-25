@@ -2,7 +2,7 @@
   :doc "your life in plain text -- notes, todos, spreadsheets, and accidentally a whole operating system"
   :when (gearp! :editing org)
   :mode "\\.org\\'"
-  :ensure (org :ref "8b15a0d0b48a0e3ce09be0d208d74a01743cbbe0" :host github :repo "emacs-straight/org-mode")
+  :ensure (org :ref "7427df2d96d264734e1ba2a943545faa1c8c763f" :host github :repo "emacs-straight/org-mode")
   :hook
   (org-mode-hook . (lambda ()
 		     (when (gearp! :editing org display-line-numbers)
@@ -25,7 +25,7 @@
   :url "https://github.com/rnkn/olivetti"
   :unless (gearp! :editing org -centered)
   :after org
-  :ensure (olivetti :ref "845eb7a95a3ca3325f1120c654d761b91683f598" :host github :repo "rnkn/olivetti")
+  :ensure (olivetti :ref "d2ccae56b442d9c5b06dd2481057abbd7eb82551" :host github :repo "rnkn/olivetti")
   :hook (org-mode-hook . olivetti-mode)
   :custom
   (olivetti-body-width . 0.618033988749)) ;; large segment in gold proportion
@@ -33,7 +33,7 @@
 (leaf org-modern
   :doc "a modern style for your Org buffers using font locking and text properties"
   :unless (gearp! :editing org -modern)
-  :ensure (org-modern :ref "713beb72aed4db43f8a10feed72136e931eb674a" :host github :repo "minad/org-modern")
+  :ensure (org-modern :ref "8775389d085a4ebdf77856b8f86ab4d9679fc55e" :host github :repo "minad/org-modern")
   :custom
   (org-adapt-indentation		.	t)
   (org-agenda-tags-column		.	0)
@@ -80,7 +80,7 @@
   :url "https://github.com/org-roam/org-roam"
   :when (gearp! :editing org roam)
   :after org
-  :ensure (org-roam :ref "7cd906b6f8b18a21766228f074aff24586770934" :host github :repo "org-roam/org-roam")
+  :ensure (org-roam :ref "903bd4ec56d29247990d005ed9052c201e18b812" :host github :repo "org-roam/org-roam")
   :doctor ("sqlite3" . ("SQLite database engine" required))
   :setq
   (org-roam-node-display-template .  `,(concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))

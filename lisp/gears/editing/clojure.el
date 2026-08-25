@@ -15,7 +15,7 @@
 
 (leaf clojure-mode
   :doc "a monad is just a monoid in the category of endofunctors, what's the problem?"
-  :ensure (clojure-mode :ref "c3b039ecf85e343edbc67c5856322654381dbc3e")
+  :ensure (clojure-mode :ref "3c68569738f04a22d52f1ca28f593c2ee733bf04")
   :when (gearp! :editing clojure)
   :hook
   ((clojure-mode-hook clojure-ts-mode-hook) . electric-pair-local-mode)
@@ -30,7 +30,7 @@
   :when (gearp! :editing clojure)
   :unless (gearp! :editing clojure -treesit)
   :emacs>= "30.1"
-  :ensure (clojure-ts-mode :ref "ba6de87b0acb5aa5483f6012611b30f6bf0414f3")
+  :ensure (clojure-ts-mode :ref "2bce67a68c270157d940ac9374ab393804c7e00d")
   :after clojure-mode
   :custom
   ;; Backpack handles grammar installation; disable clojure-ts-mode's
@@ -40,7 +40,7 @@
 (leaf cider
   :doc "the Clojure Interactive Development Environment that Rocks"
   :when (gearp! :editing clojure cider)
-  :ensure (cider :ref "436645dbb4c60073577dc59e7596318c2501ac98"))
+  :ensure (cider :ref "c17d11494b35502079caeac2fe7c39173349ce10"))
 
 (leaf eglot
   :doc "Language Server Protocol support for Clojure"

@@ -23,7 +23,7 @@
 (leaf markdown-mode
   :doc "the markup language everyone thinks they know until they hit nested lists"
   :when (gearp! :editing markdown)
-  :ensure (markdown-mode :ref "9de2df5a9f2f864c82ec112d3369154767a2bb49")
+  :ensure (markdown-mode :ref "f5d520b3ee7722dd2231ab586ba51d8eb166e49b")
   :mode ("\\.md\\'" "\\.markdown\\'" "\\.mkd\\'")
   :hook
   ((markdown-mode-hook markdown-ts-mode-hook) . visual-line-mode)
@@ -35,7 +35,7 @@
 (leaf markdown-ts-mode
   :doc "tree-sitter support for Markdown (external, Emacs < 31)"
   :emacs< 31
-  :ensure (markdown-ts-mode :ref "2f1ee8b94cdf53cebc31ae08ecfbba846193d5e1")
+  :ensure (markdown-ts-mode :ref "801579b9b955f63673dd6dc9742c1fd5311b76c9")
   :when (and (gearp! :editing markdown)
 	     (not (gearp! :editing markdown -treesit)))
   :require t)

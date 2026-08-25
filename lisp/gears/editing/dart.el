@@ -9,7 +9,7 @@
 
 (leaf dart-mode
   :doc "the language where everything is a widget and nothing is simple"
-  :ensure (dart-mode :ref "773e9ebc74a258af2db395b01febfb652a42f3ab")
+  :ensure (dart-mode :ref "ea9c2204f3e27b5419b9c5dba8b2078b22eb8461")
   :when (gearp! :editing dart)
   :hook
   ((dart-mode-hook dart-ts-mode-hook) . electric-pair-local-mode)
@@ -23,7 +23,7 @@
   :doc "tree-sitter support for Dart"
   :when (gearp! :editing dart)
   :unless (gearp! :editing dart -treesit)
-  :ensure (dart-ts-mode :ref "0dc52bdcf8fb5d6996cbcb67fc41c92986655afe" :host github :repo "50ways2sayhard/dart-ts-mode")
+  :ensure (dart-ts-mode :ref "e4a32507ace42953d882bb12f8def0935a424b66" :host github :repo "50ways2sayhard/dart-ts-mode")
   :after dart-mode)
 
 (leaf eglot

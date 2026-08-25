@@ -16,7 +16,7 @@
 (leaf go-mode
   :doc "if err != nil { return nil, err } -- the language"
   :when (gearp! :editing go)
-  :ensure (go-mode :ref "0ed3c5227e7f622589f1411b4939c3ee34711ebd")
+  :ensure (go-mode :ref "3a71d28ab47df685e54ca6046a7a3dd3e28b682c")
   :hook
   ((go-mode-hook go-ts-mode-hook) . electric-pair-local-mode)
   ((go-mode-hook go-ts-mode-hook) .

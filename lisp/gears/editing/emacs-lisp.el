@@ -11,7 +11,7 @@
 
 (leaf lispy
   :when (gearp! :editing emacs-lisp)
-  :ensure (lispy :host github :repo "enzuru/lispy" :ref "c2acc4bfc1add60c8679c1191fa1b10144f748eb")
+  :ensure (lispy :host github :repo "enzuru/lispy" :ref "c42d3737c57de86a5aa321d7efa29390aeedcf6f")
   :hook ((emacs-lisp-mode-hook lisp-mode-hook lisp-interaction-mode-hook lisp-data-mode-hook) . lispy-mode)
   :setq
   (lispy-key-theme . '(special paredit c-digits))
@@ -24,7 +24,7 @@
 (leaf let-completion
   :doc "Let-binding values in Elisp completion"
   :when (gearp! :editing emacs-lisp)
-  :ensure (let-completion :host github :repo "gggion/let-completion.el" :ref "ee8822e32ba9c0a81152a5dd9bf4e272655d7319")
+  :ensure (let-completion :host github :repo "gggion/let-completion.el" :ref "460cdd5a73d857d6d91469e28f84f02465db8dac")
   :hook ((emacs-lisp-mode-hook lisp-mode-hook lisp-interaction-mode-hook lisp-data-mode-hook) . let-completion-mode)
   :setq let-completion-tag-kind-alist
   '((lambda              . "λ")

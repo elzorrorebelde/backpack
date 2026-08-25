@@ -1,7 +1,7 @@
 (leaf orderless
   :doc "an orderless «completion style» that divides the pattern into space-separated components, and matches candidates that match all of the components in any order"
   :unless (gearp! :completion -orderless)
-  :ensure (orderless :ref "9cf1c90e2501566ceba59f3220b4630995004efd")
+  :ensure (orderless :ref "cebe19e3cf0f30604d1ed1bfaa74fff21a4e89a5")
   :custom
   (completion-styles . '(orderless basic))
   (completion-category-overrides . '((file (styles partial-completion orderless))))

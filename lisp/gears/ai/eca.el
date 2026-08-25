@@ -5,6 +5,6 @@
   :url "https://eca.dev"
   :when (gearp! :ai eca)
   :ensure (eca :host github :repo "editor-code-assistant/eca-emacs"
-	       :ref "0e1c7b4e924d7d7d99720342e60483b6dda187a3"
+	       :ref "0d11063a9ba2d78961b9c7f1862ba82dc724d234"
 	       :files ("*.el"))
   :doctor ("eca" . ("server binary" 'required)))

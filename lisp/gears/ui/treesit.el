@@ -13,7 +13,7 @@
   :doc "activate treesit everywhere"
   :unless (or (gearp! :ui -treesit)
               (not (backpack-treesit-available-p)))
-  :ensure (treesit-auto :ref "016bd286a1ba4628f833a626f8b9d497882ecdf3")
+  :ensure (treesit-auto :ref "e10d10adcf1a71d2c1813b44be00774237dad750")
   :require t
   :advice
   (:around treesit-install-language-grammar

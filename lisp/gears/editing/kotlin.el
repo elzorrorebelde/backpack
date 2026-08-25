@@ -24,7 +24,7 @@
   :when (gearp! :editing kotlin)
   :unless (gearp! :editing kotlin -treesit)
   :emacs>= "30.1"
-  :ensure (kotlin-ts-mode :ref "136d8d1fd3158fc5558aff866041c1935b574588" :host github :repo "emacsmirror/kotlin-ts-mode")
+  :ensure (kotlin-ts-mode :ref "39e30e4cf803910c2f6716efd7a5cd408a9d996b" :host github :repo "emacsmirror/kotlin-ts-mode")
   :after kotlin-mode)
 
 (leaf eglot

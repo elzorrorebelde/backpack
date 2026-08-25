@@ -43,7 +43,7 @@ Creates a per-project buffer named *vterm:<project>*."
 (leaf vterm
   :doc "Fully-featured terminal emulator based on libvterm"
   :when (gearp! :term vterm)
-  :ensure (vterm :ref "54c29d14bca05bdd8ae60cda01715d727831e3f9")
+  :ensure (vterm :ref "70921114908ebb260d6686db8cbe2445a64f90a2")
   :doctor ("cmake"   . ("needed to compile vterm's C module" required))
   :doctor ("libtool" . ("needed to compile vterm's C module" required))
   :bind

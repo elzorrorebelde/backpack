@@ -24,7 +24,7 @@
   :when (gearp! :editing svelte)
   :unless (gearp! :editing svelte -treesit)
   :emacs>= "30.1"
-  :ensure (svelte-ts-mode :ref "d079050fc1ba70f8fba9e596638daa2ca96e0fdd" :host github :repo "leafOfTree/svelte-ts-mode")
+  :ensure (svelte-ts-mode :ref "b1b5b4a5b09493063394a51d0f0f022645a18444" :host github :repo "leafOfTree/svelte-ts-mode")
   :after svelte-mode)
 
 (leaf eglot

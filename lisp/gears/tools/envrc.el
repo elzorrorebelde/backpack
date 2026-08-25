@@ -1,7 +1,7 @@
 (leaf envrc
   :doc "Emacs support for direnv which operates buffer-locally"
   :when (gearp! :tools direnv)
-  :ensure (envrc :ref "de1ae6e538764f74659f358b04af0d84fa0fef42")
+  :ensure (envrc :ref "e4f9fd79a612c8f81b4ba5b12ee7261fc33568f0")
   ;; Prevent envrc from activating in backpack-emacs-dir.
   ;; Backpack itself is a devenv project, but we do not want its
   ;; .envrc to kick in when Emacs is installed there.

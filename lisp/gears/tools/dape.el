@@ -3,7 +3,7 @@
 (leaf dape
   :doc "Debug Adapter Protocol client."
   :when (gearp! :tools dape)
-  :ensure (dape :ref "c81da6a8bc75f3e7b2e61f949a44243a3b051765")
+  :ensure (dape :ref "b04e927abac6fcbef480c8a39881d69baa1bec98")
   :bind (("C-c d d" . dape))
   :custom
   (dape-buffer-window-arrangement . 'right)

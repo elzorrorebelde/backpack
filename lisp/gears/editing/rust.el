@@ -9,7 +9,7 @@
 
 (leaf rust-mode
   :doc "the borrow checker said no, and it was right"
-  :ensure (rust-mode :ref "f68ddca5c22b94a2de7c9ce20d629cd78d60b269")
+  :ensure (rust-mode :ref "0058837c048cc031ca1a13f598a6a6604777458b")
   :when (gearp! :editing rust)
   :hook
   ((rust-mode-hook rust-ts-mode-hook) . electric-pair-local-mode)

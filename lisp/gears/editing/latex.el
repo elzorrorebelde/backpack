@@ -1,7 +1,7 @@
 (leaf auctex
   :doc "for documents that look beautiful but whose source makes you weep"
   :when (gearp! :editing latex)
-  :ensure (auctex :ref "9779fa472e50891666e23dde541e01c3cfc852ec")
+  :ensure (auctex :ref "1c17eb433c7a040df4136911672cb8bd0bbf36e2")
   :mode ("\\.tex\\'" . LaTeX-mode)
   :hook
   (LaTeX-mode-hook . visual-line-mode)

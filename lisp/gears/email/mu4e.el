@@ -3,7 +3,7 @@
 (leaf mu4e-query
   :when (gearp! :email mu4e)
   :doc "use Emacs lisp to create valid mu queries"
-  :ensure (mu4e-query :host github :repo "mickeynp/mu4e-query" :ref "dca407e1dd9c5d7a84a242b8bb8ceff27037a429")
+  :ensure (mu4e-query :host github :repo "mickeynp/mu4e-query" :ref "088d14e210a870a85cef11a307a68d41b202063d")
   :require t
   :leaf-defer nil)
 
@@ -22,7 +22,7 @@
 (leaf mu4e
   :when (gearp! :email mu4e)
   :tag "email" "mu4e"
-  :ensure (mu4e :host github :repo "djcb/mu" :ref "1a501281443eca6ccf7a7267a1c9c720bc6ccca1"
+  :ensure (mu4e :host github :repo "djcb/mu" :ref "5a5c4bd4bbea46c4018f5346bb1a995a0827b2af"
                  :files ("mu4e/*.el" "mu4e/*.el.in"))
   :doctor
   ("msmtp" . "program that sends email")

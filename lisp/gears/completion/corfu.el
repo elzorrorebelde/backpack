@@ -5,7 +5,7 @@ auto-idle (zero-prefix auto when LSP active, 1s delay),
 auto-idle-slow (with auto-idle: use 2s delay instead of 1s).
 On Emacs < 31 in terminal, uses corfu-terminal (overlay-based popup)."
   :when (gearp! :completion corfu)
-  :ensure (corfu :ref "76ee8f4e57d4cfb0deb3988cde199e6028cfbe7e")
+  :ensure (corfu :ref "75be36fe63e78c63ac71c32039ab07836bd532ac")
   :init
   (when (gearp! :completion corfu auto-for-prog)
     (add-hook 'prog-mode-hook (lambda () (setq-local corfu-auto t))))

@@ -8,7 +8,7 @@
 Use C-h . to show documentation in a side window; C-u C-h . to dismiss it.
 Use C-, to toggle the hover childframe on/off."
   :when (gearp! :tools eldoc box)
-  :ensure (eldoc-box :ref "fead2cef661790417267e5498d4d14806e020f99")
+  :ensure (eldoc-box :ref "e458cefba4013785ef6099c6245463689a50dd7d")
   :bind
   ("C-," . backpack/eldoc-box-toggle)
   :custom

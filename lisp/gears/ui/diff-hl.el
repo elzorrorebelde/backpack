@@ -1,7 +1,7 @@
 (leaf diff-hl
   :doc "VCS change indicators in the fringe"
   :when (gearp! :ui diff-hl)
-  :ensure (diff-hl :ref "7d873b2f58908de1ea2f499da9bf993e088953d7")
+  :ensure (diff-hl :ref "6f1df2b83d1140a2938409b35de7f4c9c7b1defd")
   :hook
   (dired-mode-hook . diff-hl-dired-mode)
   :global-minor-mode global-diff-hl-mode diff-hl-flydiff-mode

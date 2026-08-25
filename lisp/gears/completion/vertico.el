@@ -1,7 +1,7 @@
 (leaf vertico
   :doc "provides a performant and minimalistic vertical completion UI based on the default completion system"
   :unless (gearp! :completion -vertico)
-  :ensure (vertico :ref "488685badfdf49bb750a213f228bdba8e113c7c8")
+  :ensure (vertico :ref "a6874e3d8c74a9eea77967d702d608ebbd6b27ec")
   :leaf-defer nil
   :bind
   (:vertico-map ("?"		.	#'minibuffer-completion-help)

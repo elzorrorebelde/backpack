@@ -2,12 +2,12 @@
   :doc "forward-compatibility library required by consult on Emacs < 31"
   :emacs< 31
   :unless (gearp! :completion -consult)
-  :ensure (compat :ref "b5b48183689b536f72b1214106afeabc465da9d4"))
+  :ensure (compat :ref "df03e91f1fc47503ca71e11dd507ed18ca8b5ab0"))
 
 (leaf consult
   :doc "enhanced minibuffer commands: buffer switching, search, navigation, and more"
   :unless (gearp! :completion -consult)
-  :ensure (consult :ref "c62e767869d640cf19c99401562f906cb20c9c55")
+  :ensure (consult :ref "3ddec5493bce5445f099537be50b7a4f79c68321")
   :leaf-defer nil
   :bind
   ;; Replace built-in commands with consult equivalents
@@ -59,7 +59,7 @@
   :when (and (not (gearp! :completion -consult))
 	     (gearp! :completion consult eglot)
 	     (not (gearp! :completion -eglot)))
-  :ensure (consult-eglot :ref "d8b444aac39edfc6473ffbd228df3e9119451b51")
+  :ensure (consult-eglot :ref "3e4d9a40911b897c0a2c5d20199d0f7c30bfc1c2")
   :after (consult eglot)
   :bind (:eglot-mode-map
 	 ("C-c l s"	.	consult-eglot-symbols)))

@@ -112,7 +112,7 @@
 (leaf diff-hl
   :doc "VC status indicators in the dired fringe"
   :when (gearp! :tools dired vc)
-  :ensure (diff-hl :ref "b965e19e6e7f9933199e421849a49229207c1c9f")
+  :ensure (diff-hl :ref "6f1df2b83d1140a2938409b35de7f4c9c7b1defd")
   :hook (dired-mode-hook . diff-hl-dired-mode))
 
 (leaf dirvish
@@ -121,7 +121,7 @@
   :ensure (dirvish
            :host github :repo "alexluigit/dirvish"
            :files (:defaults "extensions/*.el")
-           :ref "d877433f957a363ad78b228e13a8e5215f2d6593")
+           :ref "bf164ee21e128837ede59be03836a9900c4a41be")
   :bind
   (("C-x d" . dirvish)
    ("C-x C-j" . dirvish-dwim-target-dirvish)

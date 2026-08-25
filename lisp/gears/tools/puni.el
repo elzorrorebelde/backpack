@@ -3,7 +3,7 @@
 Soft-delete, slurp/barf, wrap/splice, raise — works with any
 major mode that defines sexp boundaries."
   :when (gearp! :tools puni)
-  :ensure (puni :ref "7adf54282c94267bf1d69aece94b816dd4af09bc")
+  :ensure (puni :ref "04819e0bad5ed62af9e412ef9715b33bb1edc3ba")
   :hook
   (prog-mode-hook . puni-mode)
   (text-mode-hook . puni-mode)

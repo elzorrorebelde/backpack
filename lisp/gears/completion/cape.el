@@ -2,7 +2,7 @@
   :doc "completion-at-point extensions: dabbrev, file, keyword, etc.
 Enriches Corfu with additional completion backends."
   :when (gearp! :completion cape)
-  :ensure (cape :ref "74d37ab3e1b8d11c3871503c46720b3ed8d4c503")
+  :ensure (cape :ref "f0135abaf95a22b9fb2c951751a5d0733ce61bbd")
   :leaf-defer nil
   :bind
   ("M-p d" . cape-dabbrev)

@@ -10,7 +10,7 @@
 
 (leaf haskell-mode
   :doc "a monad is just a monoid in the category of endofunctors, what's the problem?"
-  :ensure (haskell-mode :ref "2dd755a5fa11577a9388af88f385d2a8e18f7a8d")
+  :ensure (haskell-mode :ref "781e4669a0e0917fa8c532371cbfb1eb5b03b645")
   :when (gearp! :editing haskell)
   :hook
   ((haskell-mode-hook haskell-ts-mode-hook) . electric-pair-local-mode)

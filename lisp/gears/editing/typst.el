@@ -13,7 +13,7 @@
   :ensure (typst-ts-mode
 	   :host codeberg
 	   :repo "meow_king/typst-ts-mode"
-           :ref "278562d702de429f5c4369c007913ca0ef1584f3")
+           :ref "155bb36cff3afe701a0f6b57bd3fe5c9effaa314")
   :when (gearp! :editing typst)
   :mode "\\.typ\\'"
   :hook

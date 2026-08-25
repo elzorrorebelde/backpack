@@ -9,7 +9,7 @@
 
 (leaf kdl-mode
   :doc "the KDL document language — nodes, values, and types, no curly-brace soup"
-  :ensure (kdl-mode :host github :repo "taquangtrung/emacs-kdl-mode" :ref "2d849e298199f490e4894c01764a8a83decd704a")
+  :ensure (kdl-mode :host github :repo "taquangtrung/emacs-kdl-mode" :ref "c6ef2a0375b1e179c08a2e0f3809d318d8a0c090")
   :when (gearp! :editing kdl)
   :hook
   ((kdl-mode-hook kdl-ts-mode-hook) . electric-pair-local-mode)
@@ -21,6 +21,6 @@
 
 (leaf kdl-ts-mode
   :doc "tree-sitter major mode for KDL files"
-  :ensure (kdl-ts-mode :host github :repo "merrickluo/kdl-ts-mode" :ref "90cf3a9934c066d8613dee94816aa59be3ed1d00")
+  :ensure (kdl-ts-mode :host github :repo "merrickluo/kdl-ts-mode" :ref "02400f0a7030f04b85ef89d769d5a58f8f10b538")
   :unless (gearp! :editing kdl -treesit)
   :after kdl-mode)

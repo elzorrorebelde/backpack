@@ -5,7 +5,7 @@
 
 (leaf nix-mode
   :doc "it works on my machine -- then let's ship your machine"
-  :ensure (nix-mode :ref "719feb7868fb567ecfe5578f6119892c771ac5e5")
+  :ensure (nix-mode :ref "2c77e7e0b7540efbb20ccaee3557ef90a5dc77f0")
   :when (gearp! :editing nix)
   :hook
   ((nix-mode-hook nix-ts-mode-hook) . electric-pair-local-mode)
@@ -35,7 +35,7 @@
 
 (leaf nix-ts-mode
   :doc "tree-sitter major mode for nix"
-  :ensure (nix-ts-mode :ref "d769e53ccc0f40026fd11c7e23bf419c2caf4732")
+  :ensure (nix-ts-mode :ref "03c77fdbbd22d9b87a654169c26339b28c97d8cd")
   :unless (gearp! :editing nix -treesit)
   :after nix-mode)
 

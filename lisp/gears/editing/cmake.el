@@ -8,7 +8,7 @@
 (leaf cmake-mode
   :doc "the build system you need a build system to understand"
   :when (gearp! :editing cmake)
-  :ensure (cmake-mode :ref "1772622772133fad3b348ca4a5b4df3bbd69da75")
+  :ensure (cmake-mode :ref "c162d6852d09a82cf87ff0cda6a23abc775dfdb6")
   :hook
   ((cmake-mode-hook cmake-ts-mode-hook) . electric-pair-local-mode)
   ((cmake-mode-hook cmake-ts-mode-hook) .

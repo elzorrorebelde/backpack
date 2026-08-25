@@ -22,7 +22,7 @@
 (leaf web-mode
   :doc "major mode for editing web templates (PHP, JSX, Blade, etc.)"
   :when (gearp! :editing html web)
-  :ensure (web-mode :ref "e93b3fb89fd6345a5ff59795bed712abd486200a"))
+  :ensure (web-mode :ref "e417e389474f934f4f3c11c88ad6c476642e1f90"))
 
 (leaf eglot
   :doc "Language Server Protocol support for HTML"

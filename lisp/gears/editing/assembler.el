@@ -12,7 +12,7 @@
 (leaf nasm-mode
   :doc "NASM x86 assembly major mode"
   :when (gearp! :editing assembler nasm)
-  :ensure (nasm-mode :ref "4e670f6dededab858251670aa5459c950f78d867")
+  :ensure (nasm-mode :ref "fab76d8e092419c341b6240fcc7123975db177e1")
   :hook (nasm-mode-hook . electric-pair-local-mode)
   (nasm-mode-hook .
 		  (lambda ()
