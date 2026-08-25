@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+set -eu
+
+# ── Backpack Outdated ────────────────────────────────────────────────────────
+# Dev tool: check which pinned package refs are behind upstream.
+# Usage: dev/outdated [--update] [--pouch <pouch>] [--gear <gear>]
+# Prerequisites: run `bin/backpack ensure` first.
+
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+BACKPACK_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [ ! -f "$BACKPACK_DIR/dev/outdated.el" ] || [ ! -d "$BACKPACK_DIR/base-packages" ]; then
+    echo "Error: This script must be run from the Backpack development directory" >&2
+    exit 1
+fi
+
+exec emacs --batch \
+    --eval "(setq user-emacs-directory \"$BACKPACK_DIR/\")" \
+    --eval "(setq outdated--repo-root \"$BACKPACK_DIR/\")" \
+    -l "$BACKPACK_DIR/dev/outdated.el" \
+    -- "$@"
