@@ -412,6 +412,7 @@ The behavior depends on `backpack-mode':
   (load (expand-file-name "gears/editing/org" backpack-core-dir))
   (load (expand-file-name "gears/editing/powershell" backpack-core-dir))
   (load (expand-file-name "gears/editing/python" backpack-core-dir))
+  (load (expand-file-name "gears/editing/qml" backpack-core-dir))
   (load (expand-file-name "gears/editing/rst" backpack-core-dir))
   (load (expand-file-name "gears/editing/rust" backpack-core-dir))
   (load (expand-file-name "gears/editing/sass" backpack-core-dir))
