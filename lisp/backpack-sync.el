@@ -104,7 +104,7 @@ excluded `elpaca--activate-package' in the pre-generic elpaca API."
 
 ;;; Elpaca installation from base-packages
 
-(defvar elpaca-installer-version 0.11)
+(defvar elpaca-installer-version 0.12)
 (defvar elpaca-directory (expand-file-name "elpaca/" backpack-nonessential-dir))
 (defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
 (defvar elpaca-sources-directory (expand-file-name "sources" elpaca-directory))
