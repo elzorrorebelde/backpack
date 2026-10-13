@@ -276,12 +276,12 @@ Returns a list of values."
   (let (values collecting)
     (dolist (item plist)
       (cond
+       ((eq item key)
+        (setq collecting t))
        (collecting
         (if (keywordp item)
             (setq collecting nil)
-          (push item values)))
-       ((eq item key)
-        (setq collecting t))))
+          (push item values)))))
     (nreverse values)))
 
 (defun backpack-inventory--extract-leaf-keyword (props keyword)

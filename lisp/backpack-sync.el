@@ -93,32 +93,21 @@ This should be called after packages are built but before their config runs."
 
 ;;; Build steps for each mode
 
-(defvar backpack--sync-build-steps
-  '(elpaca--clone
-    elpaca--configure-remotes
-    elpaca--checkout-ref
-    elpaca--run-pre-build-commands
-    elpaca--queue-dependencies
-    elpaca--check-version
-    elpaca--link-build-files
-    elpaca--generate-autoloads-async
-    elpaca--byte-compile
-    elpaca--compile-info
-    elpaca--install-info
-    elpaca--add-info-path
-    elpaca--run-post-build-commands)
-  "Build steps for sync mode - excludes `elpaca--activate-package'.")
-
-(defvar backpack--activation-only-steps
-  '(elpaca--queue-dependencies elpaca--add-info-path elpaca--activate-package)
-  "Steps for normal mode - only activate already-built packages.")
+(defun backpack--elpaca-skip-activate-in-sync (orig-fn e)
+  "Advice to skip `elpaca-activate' during sync mode (`backpack ensure').
+Packages are built but not activated in sync mode; activation happens
+in normal mode.  Replaces the old `backpack--sync-build-steps' list, which
+excluded `elpaca--activate-package' in the pre-generic elpaca API."
+  (if (backpack-sync-mode-p)
+      (elpaca-continue e)
+    (funcall orig-fn e)))
 
 ;;; Elpaca installation from base-packages
 
 (defvar elpaca-installer-version 0.11)
 (defvar elpaca-directory (expand-file-name "elpaca/" backpack-nonessential-dir))
 (defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
-(defvar elpaca-repos-directory (expand-file-name "repos/" elpaca-directory))
+(defvar elpaca-sources-directory (expand-file-name "sources" elpaca-directory))
 
 ;; Location of elpaca in base-packages (bundled with Backpack)
 (defvar backpack--elpaca-source-dir
@@ -139,8 +128,8 @@ This is platform-agnostic and doesn't rely on external tools."
         (copy-file file dest-file t))))))
 
 (defun backpack--elpaca-repo-dir ()
-  "Return the elpaca repo directory path."
-  (expand-file-name "elpaca/" elpaca-repos-directory))
+  "Return the elpaca source checkout directory path."
+  (expand-file-name "elpaca/" elpaca-sources-directory))
 
 (defun backpack--elpaca-build-dir ()
   "Return the elpaca build directory path."
@@ -153,11 +142,11 @@ This is platform-agnostic and doesn't rely on external tools."
          (file-exists-p (expand-file-name "elpaca.el" repo-dir)))))
 
 (defun backpack--install-elpaca-from-base-packages ()
-  "Copy elpaca from base-packages to elpaca-repos-directory.
+  "Copy elpaca from base-packages to elpaca-sources-directory.
 This uses the bundled elpaca instead of cloning from the internet."
   (let ((repo-dir (backpack--elpaca-repo-dir)))
     (message "Backpack: Installing elpaca from base-packages...")
-    (make-directory elpaca-repos-directory t)
+    (make-directory elpaca-sources-directory t)
     (backpack--copy-directory-recursively backpack--elpaca-source-dir repo-dir)
     (message "Backpack: Elpaca source copied to %s" repo-dir)))
 
@@ -241,28 +230,37 @@ Uses `elpaca-process-call' for cross-platform git invocation."
 (defun backpack--recipe-force-rebuild-on-ref-change (recipe)
   "Modify RECIPE to force rebuild if the ref has changed.
 In sync mode, checks if the requested :ref differs from the currently
-checked out commit.  If so, returns build steps that include fetch,
-checkout, and rebuild operations."
+checked out commit.  If so, returns :build substitution rules that fetch,
+checkout, and rebuild the package (the new elpaca expresses :build as
+substitution rules, not as an explicit step list).  The recipe's own
+:build rules are preserved so package-specific steps (e.g. the pdf-tools
+epdfinfo compile step) still run on rebuild."
   (when (backpack-sync-mode-p)
     (let* ((package (plist-get recipe :package))
            (requested-ref (plist-get recipe :ref))
+           (declared-build (plist-get recipe :build))
            (repo-dir (when package
-                       (expand-file-name package elpaca-repos-directory))))
+                       (expand-file-name package elpaca-sources-directory))))
       (when (and requested-ref
                  (backpack--ref-needs-update-p repo-dir requested-ref))
         (message "Backpack: Ref changed for '%s', will fetch and rebuild" package)
-        `(:build (elpaca--fetch
-                  elpaca--checkout-ref
-                  elpaca--run-pre-build-commands
-                  elpaca--queue-dependencies
-                  elpaca--check-version
-                  elpaca--link-build-files
-                  elpaca--generate-autoloads-async
-                  elpaca--byte-compile
-                  elpaca--compile-info
-                  elpaca--install-info
-                  elpaca--add-info-path
-                  elpaca--run-post-build-commands))))))
+        (let ((rules (list '(:not elpaca-queue-dependencies elpaca-activate)
+                           '(:first elpaca-git--fetch
+                                    elpaca-git--checkout-ref
+                                    elpaca-queue-dependencies
+                                    elpaca-check-version
+                                    elpaca-build-link
+                                    elpaca-build-autoloads
+                                    elpaca-build-compile
+                                    elpaca-build-docs))))
+          ;; Preserve the recipe's own :build rule(s) (e.g. the pdf-tools
+          ;; epdfinfo compile step) so they still apply on rebuild.
+          (when declared-build
+            (setq rules (append rules
+                                (if (keywordp (car-safe declared-build))
+                                    (list declared-build) ; single rule
+                                  declared-build))))
+          `(:build ,rules))))))
 
 (defun backpack--recipe-skip-unbuilt-in-normal-mode (recipe)
   "Modify RECIPE to skip building in normal mode if package isn't already built.
@@ -283,7 +281,7 @@ Returns a plist with :build set to activation-only steps for unbuilt packages."
   (when (featurep 'elpaca)
     (cond
      ((backpack-sync-mode-p)
-      (setq elpaca-build-steps backpack--sync-build-steps)
+      (advice-add 'elpaca-activate :around #'backpack--elpaca-skip-activate-in-sync)
       (add-to-list 'elpaca-recipe-functions #'backpack--recipe-force-rebuild-on-ref-change))
      ((backpack-normal-mode-p)
       (add-to-list 'elpaca-recipe-functions #'backpack--recipe-skip-unbuilt-in-normal-mode)))))
@@ -350,8 +348,11 @@ Packages in `backpack--enable-on-sync-packages' will still have their forms run.
               (dolist (entry original-forms)
                 (when (memq (car entry) backpack--enable-on-sync-packages)
                   (push entry filtered)))
-              (let ((forms-cell (nthcdr 7 q)))
-                (setcar forms-cell (nreverse filtered)))
+              ;; The queue struct is (:type list); cl-defstruct does not
+              ;; generate a setf for its accessors, so mutate the forms slot
+              ;; directly.  Layout: (tag type id time autoloads forms elpacas),
+              ;; hence forms is at index 5.
+              (setcar (nthcdr 5 q) (nreverse filtered))
               (funcall orig-fn q))
           (error
            (message "Backpack: Error in forms filtering: %S" err)

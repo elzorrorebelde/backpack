@@ -111,6 +111,10 @@ in
 
     # development files
     pkgs.enchant.dev # for jinx
+    pkgs.autoreconfHook
+    pkgs.libpng
+    pkgs.glib
+    pkgs.poppler
   ];
   enterShell = ''
     export BACKPACK_ROOT="$DEVENV_ROOT"

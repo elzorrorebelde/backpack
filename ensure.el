@@ -24,8 +24,8 @@
   (load backpack-file nil nil nil t))
 
 ;; At this point, elpaca should be loaded from backpack--ensure-elpaca
-;; Configure elpaca build steps for sync mode (build everything except activation)
-(setq elpaca-build-steps backpack--sync-build-steps)
+;; (build steps are configured by `backpack--setup-elpaca-for-mode';
+;; sync mode skips activation via advice rather than a custom step list)
 
 ;; Load user configuration to get gear declarations
 (let ((init-file (expand-file-name "init.el" backpack-user-dir)))
@@ -52,7 +52,7 @@
     (dolist (q elpaca--queues)
       (dolist (entry (elpaca-q<-elpacas q))
         (let* ((e (cdr entry))
-               (status (elpaca--status e))
+               (status (elpaca<-status e))
                (pkg-name (elpaca<-package e)))
           (cl-incf total)
           (cond
@@ -99,76 +99,92 @@
       (setq backpack--last-progress-message msg)
       (message "Installing packages... %s" msg))))
 
-(defun backpack--format-elpaca-log-entry (entry)
-  "Format a single elpaca log ENTRY for display."
-  (let ((status (car entry))
-        (time (nth 1 entry))
-        (text (nth 2 entry)))
+(defun backpack--format-elpaca-log-entry (event)
+  "Format a single elpaca log EVENT for display.
+EVENT is an `elpaca-event' struct from `elpaca--event-log'."
+  (let ((payload (elpaca-event<-payload event))
+        (time (elpaca-event<-time event)))
     (format "  [%s] %s%s"
-            status
-            (if text (if (string-prefix-p "  " text) text (concat "  " text)) "")
+            (or (plist-get payload :status) 'info)
+            (or (plist-get payload :info) "")
             (if time (format " (%s)" (format-time-string "%H:%M:%S" time)) ""))))
 
 (defun backpack--dump-failed-package-logs (q)
-  "Dump elpaca log entries for each failed package in queue Q."
+  "Dump elpaca log events for each failed package in queue Q."
   (dolist (entry (elpaca-q<-elpacas q))
     (let ((e (cdr entry)))
-      (when (eq (elpaca--status e) 'failed)
-        (message "")
-        (message "  ── %s ──" (elpaca<-package e))
-        (dolist (log-entry (reverse (elpaca<-log e)))
-          (message "%s" (backpack--format-elpaca-log-entry log-entry)))))))
+      (when (eq (elpaca<-status e) 'failed)
+        (let ((id (elpaca<-id e)))
+          (message "")
+          (message "  ── %s ──" (elpaca<-package e))
+          (dolist (event (reverse (cl-remove-if-not
+                                   (lambda (ev) (eq (elpaca-event<-id ev) id))
+                                   elpaca--event-log)))
+            (message "%s" (backpack--format-elpaca-log-entry event))))))))
 
 (defun backpack--queue-finished-p (q)
-  "Return non-nil if queue Q is finished (complete or all packages processed)."
-  (or (eq (elpaca-q<-status q) 'complete)
-      ;; Also consider finished if all packages are either finished or failed
-      (let ((all-done t))
-        (dolist (entry (elpaca-q<-elpacas q))
-          (let ((status (elpaca--status (cdr entry))))
-            (unless (memq status '(finished failed))
-              (setq all-done nil))))
-        all-done)))
+  "Return non-nil if all packages in queue Q reached a terminal status."
+  (cl-loop for (_ . e) in (elpaca-q<-elpacas q)
+           always (memq (elpaca<-status e) '(finished failed))))
 
 (defun backpack--wait-with-progress ()
   "Wait for elpaca to finish while showing progress."
   (message "Installing packages...")
-  (when-let* ((q (cl-loop for q in elpaca--queues thereis
-                          (and (eq (elpaca-q<-status q) 'incomplete)
-                               (elpaca-q<-elpacas q) q))))
-    (setq elpaca--waiting t)
-    (elpaca-process-queues)
-    (let ((last-print-time 0)
-          (stall-count 0)
-          (last-summary nil))
-      (cl-block nil
-        (condition-case nil
-            (while (not (backpack--queue-finished-p q))
-              (discard-input)
-              ;; Print progress every 0.5 seconds
-              (let* ((now (float-time))
-                     (summary (backpack--get-package-status-summary)))
-                (when (> (- now last-print-time) 0.5)
-                  (setq last-print-time now)
-                  (backpack--print-progress)
-                  ;; Check for stall (no progress for too long)
-                  (if (equal summary last-summary)
-                      (cl-incf stall-count)
-                    (setq stall-count 0)
-                    (setq last-summary summary))
-                  ;; If stalled for 60 iterations (~30 seconds) and we have failures, break
-                  (when (and (> stall-count 60)
-                             (> (plist-get summary :failed) 0)
-                             (= (plist-get summary :in-progress) 0))
-                    (message "Installation stalled -- %d package(s) failed: %s"
-                             (plist-get summary :failed)
-                             (mapconcat #'identity (plist-get summary :failed-packages) ", "))
-                    (cl-return))))
-              (sit-for elpaca-wait-interval))
-          (quit (cl-loop for (_ . e) in (elpaca-q<-elpacas q) do
-                         (or (eq (elpaca--status e) 'finished) (elpaca--fail e "User quit")))))))
-    (elpaca-split-queue)
-    (setq elpaca--waiting nil))
+  (let* ((queues (reverse elpaca--queues))
+         (q (car elpaca--queues))
+         (pending (when (and q (cl-loop for cq in queues
+                                        thereis (cl-loop for (_ . e) in (elpaca-q<-elpacas cq)
+                                                         thereis (not (memq (elpaca<-status e)
+                                                                            '(finished failed))))))
+                    (nconc (cl-loop for cq in queues collect cq until (eq cq q)) (list q)))))
+    (when pending
+      (setq elpaca--waiting t)
+      (elpaca-process-queues)
+      (let ((last-print-time 0)
+            (stall-count 0)
+            (last-summary nil))
+        (cl-block nil
+          (condition-case nil
+              (while (cl-loop for pq in pending
+                              thereis (cl-loop for (_ . e) in (elpaca-q<-elpacas pq)
+                                               thereis (not (memq (elpaca<-status e)
+                                                                  '(finished failed)))))
+                (discard-input)
+                ;; Print progress every 0.5 seconds
+                (let* ((now (float-time))
+                       (summary (backpack--get-package-status-summary)))
+                  (when (> (- now last-print-time) 0.5)
+                    (setq last-print-time now)
+                    (backpack--print-progress)
+                    ;; Check for stall (no progress for too long)
+                    (if (equal summary last-summary)
+                        (cl-incf stall-count)
+                      (setq stall-count 0)
+                      (setq last-summary summary))
+                    ;; If stalled for 60 iterations (~30 seconds) and we have failures, break
+                    (when (and (> stall-count 60)
+                               (> (plist-get summary :failed) 0)
+                               (= (plist-get summary :in-progress) 0))
+                      (message "Installation stalled -- %d package(s) failed: %s"
+                               (plist-get summary :failed)
+                               (mapconcat #'identity (plist-get summary :failed-packages) ", "))
+                      (cl-return))))
+                (sit-for elpaca-wait-interval))
+            (quit (cl-loop for pq in pending do
+                           (cl-loop for (_ . e) in (elpaca-q<-elpacas pq) do
+                                    (unless (memq (elpaca<-status e) '(finished failed))
+                                      (condition-case nil
+                                          (elpaca--fail e "User quit")
+                                        (elpaca-build-error nil)))))))))
+      (elpaca-split-queue)
+      (setq elpaca--waiting nil)
+      ;; Activate enable-on-sync packages BEFORE running deferred forms,
+      ;; so their config (e.g. treesit-auto's :advice) can reference the
+      ;; package.  Must happen after `elpaca--waiting' is cleared so that
+      ;; `elpaca--finalize-queue' actually evaluates the filtered forms.
+      (when backpack--enable-on-sync-packages
+        (backpack--activate-enable-on-sync-packages))
+      (mapc #'elpaca--finalize-queue pending)))
   ;; Final progress
   (let* ((summary (backpack--get-package-status-summary))
          (failed-pkgs (plist-get summary :failed-packages)))
@@ -188,15 +204,10 @@
       (message "")
       (message "You may need to run 'backpack ensure' again or check the package recipes."))))
 
-;; Wait for all packages to be installed/built with progress reporting
+;; Wait for all packages to be installed/built with progress reporting.
+;; This also activates enable-on-sync packages before their deferred
+;; forms run and before treesit grammars are installed.
 (backpack--wait-with-progress)
-
-;; After packages are built, activate packages marked with enable-on-sync
-;; This must happen before their config forms run and before treesit grammars are installed
-(when backpack--enable-on-sync-packages
-  (message "")
-  (message "Activating packages needed for sync...")
-  (backpack--activate-enable-on-sync-packages))
 
 ;; After elpaca-wait completes, run our finalization
 ;; (elpaca-after-init-hook doesn't run when using elpaca-wait in batch mode)

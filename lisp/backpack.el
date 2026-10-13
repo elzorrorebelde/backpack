@@ -233,6 +233,15 @@ skip recompilation when the upstream grammar has not changed.")
     (unless (memq initial-window-system '(x pgtk))
       (setq command-line-x-option-alist nil))))
 
+;; Some Emacs builds (notably Nix) leave `emacs-build-time' nil.
+;; Elpaca uses it as a fallback when computing `elpaca-core-date' for
+;; Emacs versions newer than its hardcoded release table; when both are
+;; unavailable it emits "Unable to determine elpaca-core-date" and
+;; miscalculates date-based dependency version checks.  Provide a fallback
+;; so elpaca never hits that path, for any future Emacs version.
+(unless emacs-build-time
+  (setq emacs-build-time (current-time)))
+
 ;; Initialize elpaca
 (backpack--ensure-elpaca)
 
@@ -372,6 +381,7 @@ The behavior depends on `backpack-mode':
   (load (expand-file-name "gears/tools/envrc" backpack-core-dir))
   (load (expand-file-name "gears/tools/magit" backpack-core-dir))
   (load (expand-file-name "gears/tools/org-remark" backpack-core-dir))
+  (load (expand-file-name "gears/tools/pdf" backpack-core-dir))
   (load (expand-file-name "gears/tools/puni" backpack-core-dir))
   (load (expand-file-name "gears/tools/cool-motions" backpack-core-dir))
   (load (expand-file-name "gears/tools/dired" backpack-core-dir))

@@ -62,17 +62,17 @@ This is populated during gc mode.")
 
 (defun backpack--get-repo-packages ()
   "Return a list of package names that have repos cloned."
-  (when (file-exists-p elpaca-repos-directory)
+  (when (file-exists-p elpaca-sources-directory)
     (mapcar #'intern
             (cl-remove-if
              (lambda (name) (member name '("." "..")))
-             (directory-files elpaca-repos-directory nil "^[^.]")))))
+             (directory-files elpaca-sources-directory nil "^[^.]")))))
 
 (defun backpack--get-package-dependencies (package-name)
   "Get the dependencies of PACKAGE-NAME by reading its main elisp file.
 Returns a list of dependency package names (symbols)."
   (let* ((build-dir (expand-file-name (symbol-name package-name) elpaca-builds-directory))
-         (repo-dir (expand-file-name (symbol-name package-name) elpaca-repos-directory))
+         (repo-dir (expand-file-name (symbol-name package-name) elpaca-sources-directory))
          (pkg-name-str (symbol-name package-name))
          (main-file (or (let ((f (expand-file-name (concat pkg-name-str ".el") build-dir)))
                           (and (file-exists-p f) f))
@@ -130,7 +130,7 @@ Returns a list of orphaned package names."
 (defun backpack--delete-package (package-name)
   "Delete PACKAGE-NAME's build and repo directories."
   (let ((build-dir (expand-file-name (symbol-name package-name) elpaca-builds-directory))
-        (repo-dir (expand-file-name (symbol-name package-name) elpaca-repos-directory)))
+        (repo-dir (expand-file-name (symbol-name package-name) elpaca-sources-directory)))
     (when (file-exists-p build-dir)
       (message "Backpack GC: Deleting build directory for %s..." package-name)
       (delete-directory build-dir t))
@@ -186,7 +186,7 @@ If DRY-RUN is non-nil, only report what would be deleted without deleting."
       (let ((total-size 0))
         (dolist (pkg orphaned)
           (let ((build-dir (expand-file-name (symbol-name pkg) elpaca-builds-directory))
-                (repo-dir (expand-file-name (symbol-name pkg) elpaca-repos-directory)))
+                (repo-dir (expand-file-name (symbol-name pkg) elpaca-sources-directory)))
             (setq total-size (+ total-size
                                 (backpack--calculate-directory-size build-dir)
                                 (backpack--calculate-directory-size repo-dir)))))
