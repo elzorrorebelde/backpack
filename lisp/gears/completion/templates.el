@@ -7,7 +7,7 @@ indentation-based syntax.  Integrates with corfu via `cape-tempel'."
   :when (gearp! :completion templates)
   :ensure (tempel :ref "9299c5d0f35dbb02de2565404a082224c4d11654")
   :custom
-  (tempel-file . `,(expand-file-name "templates" backpack-user-dir))
+  (tempel-path . `,(expand-file-name "templates/*/*.eld" backpack-user-dir))
   :bind
   (("M-+" . tempel-complete)   ;; complete template name via completing-read
    ("M-*" . tempel-insert))    ;; insert & expand template
