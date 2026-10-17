@@ -313,10 +313,18 @@ The behavior depends on `backpack-mode':
                   (eval gear-form))
                 ;; Load gears -- their defaults are set based on backpack--gear
                 (backpack-load-gear-files)
-                ;; Now evaluate user customizations (without gear! forms)
-                ;; so they override gear defaults
-                (dolist (form rest-forms)
-                  (eval form)))
+                ;; Defer user customizations until AFTER package activation
+                ;; (backpack-user-after-init-hook runs after
+                ;; backpack-after-init-hook, which activates packages via
+                ;; elpaca).  This lets setq/with-eval-after-load in init.el
+                ;; override defaults that gears set in deferred leaf bodies
+                ;; (:custom/:setq/:config), which only run at activation.
+                ;; NOTE: package declarations (leaf ... :ensure) belong in
+                ;; ~/.backpack.d/packages.el (loaded before activation).
+                (add-hook 'backpack-user-after-init-hook
+                          (lambda ()
+                            (dolist (form rest-forms)
+                              (eval form)))))
             ;; No init file: load gears with empty configuration
             (backpack-load-gear-files)))
 	;; load custom file
