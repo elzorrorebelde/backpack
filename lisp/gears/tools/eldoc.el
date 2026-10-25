@@ -47,6 +47,9 @@ Second call re-enables it."
   (defvar-local backpack--eldoc-box-was-on nil
     "Whether eldoc-box-hover-at-point-mode was active before C-h . toggled it off.")
 
+  (defvar-local backpack--eldoc-display-functions-saved nil
+    "Original value of `eldoc-display-functions' saved before C-h . suppresses echo area.")
+
   (define-advice eldoc-doc-buffer (:around (fn &rest args) toggle-box)
     (if current-prefix-arg
         (progn
@@ -54,8 +57,13 @@ Second call re-enables it."
             (when win (quit-window nil win)))
           (when (and (display-graphic-p) backpack--eldoc-box-was-on)
             (eldoc-box-hover-at-point-mode +1)
-            (setq-local backpack--eldoc-box-was-on nil)))
+            (setq-local backpack--eldoc-box-was-on nil))
+          (when backpack--eldoc-display-functions-saved
+            (setq-local eldoc-display-functions backpack--eldoc-display-functions-saved)
+            (setq backpack--eldoc-display-functions-saved nil)))
       (when (and (display-graphic-p) (bound-and-true-p eldoc-box-hover-at-point-mode))
         (setq-local backpack--eldoc-box-was-on t)
         (eldoc-box-hover-at-point-mode -1))
-      (apply fn args))))
+      (apply fn args)
+      (setq backpack--eldoc-display-functions-saved eldoc-display-functions)
+      (setq-local eldoc-display-functions '(eldoc-display-in-buffer)))))
