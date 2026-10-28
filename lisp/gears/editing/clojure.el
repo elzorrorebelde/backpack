@@ -61,3 +61,9 @@
   :config
   (org-babel-do-load-languages
    'org-babel-load-languages (append org-babel-load-languages '((clojure . t)))))
+
+(leaf tree-guide
+  :doc "Visual tree guides for lisp code"
+  :when (gearp! :editing clojure tree-guide)
+  :ensure (tree-guide :host github :repo "benvvalk/tree-guide.el" :ref "9d092c659b766188f84e12635e827547de8eb9c2")
+  :hook ((clojure-mode-hook clojure-ts-mode-hook) . tree-guide-mode))

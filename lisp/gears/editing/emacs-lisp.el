@@ -44,3 +44,9 @@
     (make-process        . "proc")
     (start-process       . "proc")
     (make-pipe-process   . "proc")))
+
+(leaf tree-guide
+  :doc "Visual tree guides for lisp code"
+  :when (gearp! :editing emacs-lisp tree-guide)
+  :ensure (tree-guide :host github :repo "benvvalk/tree-guide.el" :ref "9d092c659b766188f84e12635e827547de8eb9c2")
+  :hook ((emacs-lisp-mode-hook lisp-mode-hook lisp-interaction-mode-hook lisp-data-mode-hook) . tree-guide-mode))
