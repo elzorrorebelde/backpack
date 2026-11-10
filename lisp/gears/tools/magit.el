@@ -32,6 +32,15 @@
   :doctor (executable-find "difft")
   :global-minor-mode magit-difftastic-mode)
 
+(leaf diff-review
+  :unless (gearp! :tools magit -review)
+  :doc "Review a git diff the way a pull request page does"
+  :ensure (diff-review :host github :repo "xiaoxinghu/diff-review" :ref "49cba292bb933e2a1a90f61145e29311636544ae")
+  :hook ((diff-review-mode diff-review-sidebar-mode) . hl-line-mode)
+  :config
+  (with-eval-after-load 'magit
+    (diff-review-magit-mode)))
+
 ;; Register magit-project-status in project-switch-commands eagerly
 ;; so it appears in C-x p p dispatch before magit is loaded.
 ;; magit-extras.el does this after loading, but we want it available
