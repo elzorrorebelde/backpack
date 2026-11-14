@@ -70,6 +70,22 @@ Inspired by `doom-unreal-buffer-functions'.")
 Set to a non-nil value to force a buffer to be considered real,
 or to the symbol `unreal' to force it to be considered unreal.")
 
+(defvar-local backpack-side-window-buffer-p nil
+  "Non-nil if this buffer has ever been displayed in a side window.
+This records the buffer's side-window role for its lifetime, even if it
+is later displayed in a regular window.")
+
+(defun backpack--mark-side-window-buffers-h (frame)
+  "Mark buffers displayed in side windows on FRAME.
+Intended for `window-buffer-change-functions', which calls global
+functions with the frame whose windows have changed.  The mark persists
+when a buffer is later displayed in a regular window."
+  (when (frame-live-p frame)
+    (dolist (window (window-list frame 'never))
+      (when (window-parameter window 'window-side)
+        (with-current-buffer (window-buffer window)
+          (setq backpack-side-window-buffer-p t))))))
+
 (defun backpack-special-buffer-p (buf)
   "Return non-nil if BUF name starts with `*'."
   (string-prefix-p "*" (buffer-name buf)))
@@ -112,8 +128,9 @@ Inspired by `doom-real-buffer-p' from Doom Emacs."
 ;;;; Fallback buffer
 
 (defun backpack-fallback-buffer ()
-  "Return the fallback buffer, creating it if needed.
-Inspired by `doom-fallback-buffer' from Doom Emacs."
+  "Return the `*scratch*' fallback buffer, creating it if needed.
+Used when no eligible user buffer is available; no other special or
+side-window-origin buffer is selected as a replacement."
   (get-buffer-create backpack-fallback-buffer-name))
 
 (defun backpack-protect-fallback-buffer-h ()
@@ -124,21 +141,41 @@ Inspired by `doom-protect-fallback-buffer-h' from Doom Emacs."
 
 ;;;; Kill advice with same-mode priority
 
+(defun backpack--user-buffer-p (buf &optional exclude-buf)
+  "Return non-nil if BUF is an eligible user buffer besides EXCLUDE-BUF.
+Special buffers and buffers with a side-window origin are never selected
+as replacements, even if another rule considers them real."
+  (and (buffer-live-p buf)
+       (not (eq buf exclude-buf))
+       (not (backpack-special-buffer-p buf))
+       (not (buffer-local-value 'backpack-side-window-buffer-p buf))
+       (backpack-real-buffer-p buf)))
+
 (defun backpack--find-buffer-with-mode (mode &optional exclude-buf)
-  "Find the first real buffer with major MODE, excluding EXCLUDE-BUF."
+  "Find the first eligible user buffer with major MODE.
+EXCLUDE-BUF is never considered."
   (cl-loop for buf in (buffer-list)
-           when (and (not (eq buf exclude-buf))
-                     (eq (buffer-local-value 'major-mode buf) mode)
-                     (backpack-real-buffer-p buf))
+           when (and (eq (buffer-local-value 'major-mode buf) mode)
+                     (backpack--user-buffer-p buf exclude-buf))
            return buf))
+
+(defun backpack--find-buffer-to-switch-to (mode exclude-buf)
+  "Choose a replacement buffer for MODE, excluding EXCLUDE-BUF.
+Prefer an eligible buffer with the same major mode, then any eligible
+user buffer, and finally the `*scratch*' fallback."
+  (or (backpack--find-buffer-with-mode mode exclude-buf)
+      (cl-loop for buf in (buffer-list)
+               when (backpack--user-buffer-p buf exclude-buf)
+               return buf)
+      (backpack-fallback-buffer)))
 
 (defun backpack--switch-to-fallback-buffer-maybe-a ()
   "Advice for `kill-current-buffer' that picks a smarter replacement.
 When killing a buffer, this advice:
 1. Prevents killing the fallback buffer.
 2. Prompts before killing modified file-visiting buffers.
-3. Switches to a buffer with the same major mode if available.
-4. Falls back to any real buffer, then to the fallback buffer.
+3. Switches to an eligible user buffer with the same major mode if available.
+4. Falls back to any eligible user buffer, then to `*scratch*'.
 
 Inspired by `doom--switch-to-fallback-buffer-maybe-a' from Doom Emacs,
 extended with same-mode priority."
@@ -157,13 +194,7 @@ extended with same-mode priority."
                                (buffer-name buf)))))
         (user-error "Aborted"))
       (let* ((mode (buffer-local-value 'major-mode buf))
-             (same-mode-buf (backpack--find-buffer-with-mode mode buf))
-             (target (or same-mode-buf
-                         (cl-loop for b in (buffer-list)
-                                  when (and (not (eq b buf))
-                                            (backpack-real-buffer-p b))
-                                  return b)
-                         (backpack-fallback-buffer))))
+             (target (backpack--find-buffer-to-switch-to mode buf)))
         ;; Switch all windows showing this buffer
         (dolist (win (get-buffer-window-list buf nil t))
           (set-window-buffer win target))
@@ -189,6 +220,8 @@ extended with same-mode priority."
 
 ;;;; Activate
 
+(add-hook 'window-buffer-change-functions
+          #'backpack--mark-side-window-buffers-h)
 (add-hook 'kill-buffer-query-functions #'backpack-protect-fallback-buffer-h)
 (advice-add 'kill-current-buffer :before-until
             #'backpack--switch-to-fallback-buffer-maybe-a)
