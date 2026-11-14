@@ -386,6 +386,7 @@ The behavior depends on `backpack-mode':
   (load (expand-file-name "gears/completion/templates" backpack-core-dir))
   (load (expand-file-name "gears/tools/activities" backpack-core-dir))
   (load (expand-file-name "gears/tools/dape" backpack-core-dir))
+  (load (expand-file-name "gears/tools/devenv" backpack-core-dir))
   (load (expand-file-name "gears/tools/eldoc" backpack-core-dir))
   (load (expand-file-name "gears/tools/envrc" backpack-core-dir))
   (load (expand-file-name "gears/tools/magit" backpack-core-dir))
