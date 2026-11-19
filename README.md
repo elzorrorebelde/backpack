@@ -9,7 +9,7 @@ A self-documenting GNU Emacs starter kit inspired by [Bedrock](https://codeberg.
 > **This GitHub repository is only a backup mirror.**  
 > The **canonical repository** is on **Radicle**: `rad:zecRiYjpjFnZWFhygfVM7shaCzJh`
 >
-> Please submit **[issues](https://radicle.network/nodes/jardin.jorgearaya.dev/rad:zecRiYjpjFnZWFhygfVM7shaCzJh/issues) and [patches](https://radicle.network/nodes/jardin.jorgearaya.dev/rad:zecRiYjpjFnZWFhygfVM7shaCzJh/patches)** exclusively to the repository
+> Please submit **[issues](https://radicle.network/nodes/oak.radicle.garden/rad:zecRiYjpjFnZWFhygfVM7shaCzJh/issues) and [patches](https://radicle.network/nodes/oak.radicle.garden/rad:zecRiYjpjFnZWFhygfVM7shaCzJh/patches)** exclusively to the repository
 > on the Radicle network.
 
 > [!WARNING]  
@@ -28,7 +28,7 @@ Make a backup of your old Emacs configuration. Then, clone this repository eithe
 In case you didn't know, Radicle is a self-described *open source*, peer-to-peer code collaboration stack built on Git. Is a really cool project and I encourage you to check it out! You **don't need to have** a radicle node to clone Backpack from mine.
 
 ```sh
-git clone --recurse-submodules https://jardin.jorgearaya.dev/zecRiYjpjFnZWFhygfVM7shaCzJh.git ~/.emacs.d
+git clone --recurse-submodules https://oak.radicle.garden/rad%3AzecRiYjpjFnZWFhygfVM7shaCzJh ~/.emacs.d
 ```
 
 #### From GitHub
