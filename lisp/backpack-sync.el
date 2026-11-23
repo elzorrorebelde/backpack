@@ -240,7 +240,12 @@ epdfinfo compile step) still run on rebuild."
            (requested-ref (plist-get recipe :ref))
            (declared-build (plist-get recipe :build))
            (repo-dir (when package
-                       (expand-file-name package elpaca-sources-directory))))
+                       (or (when (and (plist-get recipe :repo)
+                                      (fboundp 'elpaca-git-repo-dir))
+                             (condition-case nil
+                                 (elpaca-git-repo-dir recipe)
+                               (error nil)))
+                           (expand-file-name package elpaca-sources-directory)))))
       (when (and requested-ref
                  (backpack--ref-needs-update-p repo-dir requested-ref))
         (message "Backpack: Ref changed for '%s', will fetch and rebuild" package)
@@ -405,7 +410,7 @@ them in the current session without requiring a restart."
      :command (list emacs
                     "--batch"
                     "--eval" (format "(setq user-emacs-directory %S)"
-                                    backpack-emacs-dir)
+                                     backpack-emacs-dir)
                     "-l" ensure-file)
      :sentinel
      (lambda (proc _event)
