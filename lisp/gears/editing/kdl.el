@@ -7,6 +7,15 @@
     :ts-mode 'kdl-ts-mode
     :versions ((:until-abi 14 :revision "b37e3d58e5c5cf8d739b315d6114e02d42e66664"))))
 
+;; The pinned upstream kdl-mode uses this helper, which is absent in Emacs 30.
+(when (and (gearp! :editing kdl)
+           (not (fboundp 'treesit-query-valid-p)))
+  (defun treesit-query-valid-p (language query)
+    "Return non-nil when QUERY is valid for tree-sitter LANGUAGE."
+    (condition-case nil
+        (progn (treesit-query-compile language query) t)
+      (error nil))))
+
 (leaf kdl-mode
   :doc "the KDL document language — nodes, values, and types, no curly-brace soup"
   :ensure (kdl-mode :host github :repo "taquangtrung/emacs-kdl-mode" :ref "e966ed4b53f8a72b88a016e61bcadec42f317e39")
