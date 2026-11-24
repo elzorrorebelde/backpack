@@ -10,6 +10,7 @@
   (org-mode-hook . visual-line-mode)
   :custom
   (org-startup-with-latex-preview . t)
+  (org-startup-with-inline-images . `,(not (gearp! :editing org -inline-images)))
   (org-src-window-setup . 'other-window))
 
 (leaf mixed-pitch
