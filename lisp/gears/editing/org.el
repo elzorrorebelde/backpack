@@ -2,7 +2,7 @@
   :doc "your life in plain text -- notes, todos, spreadsheets, and accidentally a whole operating system"
   :when (gearp! :editing org)
   :mode "\\.org\\'"
-  :ensure (org :ref "7427df2d96d264734e1ba2a943545faa1c8c763f" :host github :repo "emacs-straight/org-mode")
+  :ensure (org :ref "3ddb8ad25f4422db4e4b95b32b933228062cfd13" :host github :repo "emacs-straight/org-mode")
   :hook
   (org-mode-hook . (lambda ()
 		     (when (gearp! :editing org display-line-numbers)
@@ -34,7 +34,7 @@
 (leaf org-modern
   :doc "a modern style for your Org buffers using font locking and text properties"
   :unless (gearp! :editing org -modern)
-  :ensure (org-modern :ref "8775389d085a4ebdf77856b8f86ab4d9679fc55e" :host github :repo "minad/org-modern")
+  :ensure (org-modern :ref "5cf5879b0c46218cacbfbd68ac78aa84d1a3abf2" :host github :repo "minad/org-modern")
   :custom
   (org-adapt-indentation		.	t)
   (org-agenda-tags-column		.	0)
@@ -127,7 +127,7 @@
   :doc "toggle hidden Org mode element parts on cursor hover"
   :when (gearp! :editing org appear)
   :after org
-  :ensure (org-appear :ref "32ee50f8fdfa449bbc235617549c1bccb503cb09" :host github :repo "awth13/org-appear")
+  :ensure (org-appear :ref "77d23efec5f5c25fc0798364d2b51a3ce3d8d518" :host github :repo "awth13/org-appear")
   :hook (org-mode-hook . org-appear-mode))
 
 (leaf ob-org
