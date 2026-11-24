@@ -5,7 +5,7 @@
   :url "https://github.com/nobiot/org-remark"
   :when (and (gearp! :tools org-remark) (gearp! :editing org))
   :after org
-  :ensure (org-remark :ref "6f8193c4997c734c39ccf814636c4e5d10eb42d1" :host github :repo "nobiot/org-remark")
+  :ensure (org-remark :ref "ce00a4cda3aeaa02626b90b5d019fefb5490ef4d" :host github :repo "nobiot/org-remark")
   :preface
   (defvar backpack-org-remark-map (make-sparse-keymap)
     "Prefix keymap for `org-remark' commands.")
