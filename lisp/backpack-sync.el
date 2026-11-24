@@ -135,6 +135,36 @@ This is platform-agnostic and doesn't rely on external tools."
   "Return the elpaca build directory path."
   (expand-file-name "elpaca/" elpaca-builds-directory))
 
+(defun backpack--org-build-elpaca-dir ()
+  "Return a usable Elpaca source directory for Org's build helper."
+  (let* ((entry (and (featurep 'elpaca) (elpaca-get 'elpaca)))
+         (entry-dir (when entry
+                      (condition-case nil
+                          (elpaca<-source-dir entry)
+                        (error nil))))
+         (fallback-dir (backpack--elpaca-repo-dir)))
+    (or (and entry-dir
+             (file-readable-p (expand-file-name "elpaca-process.el" entry-dir))
+             entry-dir)
+        (and (file-readable-p (expand-file-name "elpaca-process.el" fallback-dir))
+             fallback-dir)
+        (error "Backpack: cannot locate Elpaca's elpaca-process.el for the Org build"))))
+
+(defun backpack--elpaca-menu-org-build-around (orig-fn e)
+  "Call ORIG-FN for E with a usable Elpaca source entry.
+The Org menu build helper only reads `elpaca<-source-dir' from the
+entry returned by `elpaca-get' for `elpaca'."
+  (let* ((source-dir (backpack--org-build-elpaca-dir))
+         (entry (elpaca<--create :id 'elpaca :package "elpaca"
+                                 :source-dir source-dir))
+         (original-get (symbol-function 'elpaca-get)))
+    (cl-letf (((symbol-function 'elpaca-get)
+               (lambda (id)
+                 (if (eq id 'elpaca)
+                     entry
+                   (funcall original-get id)))))
+      (funcall orig-fn e))))
+
 (defun backpack--elpaca-installed-p ()
   "Return non-nil if elpaca is already installed in the expected location."
   (let ((repo-dir (backpack--elpaca-repo-dir)))
@@ -321,6 +351,12 @@ Used in sync mode (`backpack ensure')."
     (elpaca-process-queues)))
 
 ;;; Elpaca advice hooks (applied after elpaca loads)
+
+(with-eval-after-load 'elpaca-menu-org
+  (unless (advice-member-p #'backpack--elpaca-menu-org-build-around
+                           'elpaca-menu-org--build)
+    (advice-add 'elpaca-menu-org--build :around
+                #'backpack--elpaca-menu-org-build-around)))
 
 (with-eval-after-load 'elpaca
   (backpack--setup-elpaca-for-mode)

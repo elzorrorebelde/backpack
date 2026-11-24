@@ -5,5 +5,6 @@
 (load-file (expand-file-name "test/treesit/backpack-treesit.el" backpack-emacs-dir))
 (load-file (expand-file-name "test/inventory/backpack-inventory.el" backpack-emacs-dir))
 (load-file (expand-file-name "test/devenv/backpack-devenv.el" backpack-emacs-dir))
+(load-file (expand-file-name "test/sync/backpack-sync.el" backpack-emacs-dir))
 
 (provide 'all-tests)
