@@ -115,6 +115,14 @@ in
     pkgs.libpng
     pkgs.glib
     pkgs.poppler
+
+    # Build Pele's native renderer during `backpack ensure` on NixOS.
+    pkgs.gnumake
+    pkgs.gcc
+    pkgs.python3
+    pkgs.pkg-config
+    pkgs.pango
+    pkgs.fontconfig
   ];
   enterShell = ''
     export BACKPACK_ROOT="$DEVENV_ROOT"

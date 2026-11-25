@@ -1,24 +1,26 @@
 ;; -*- lexical-binding: t; -*-
 
-(leaf mermaid-mode
-  :doc "major mode for editing mermaid diagram files"
-  :url "https://github.com/abrochard/mermaid-mode"
+(leaf pele
+  :doc "edit Mermaid diagrams and preview SVGs; the native renderer is provisioned by backpack ensure"
+  :url "https://github.com/LuciusChen/pele.el"
   :when (gearp! :editing mermaid)
-  :mode ("\\.mmd\\'" "\\.mermaid\\'")
-  :ensure (mermaid-mode :ref "804dbcb1452e7496ae0c48e20362da6351227246" :host github :repo "abrochard/mermaid-mode")
-  :doctor ("mmdc" . "mermaid-cli, required to render mermaid diagrams")
+  :mode (("\\.mmd\\'" . pele-mode)
+         ("\\.mermaid\\'" . pele-mode))
+  :ensure (pele :ref "8b37ebc41b4b5cd10c3fb645bd8e5d07d1f90fc8" :host github :repo "LuciusChen/pele.el")
   :hook
-  (mermaid-mode-hook . (lambda ()
-                         (unless (gearp! :editing mermaid -display-line-numbers)
-                           (display-line-numbers-mode)))))
+  (pele-mode-hook . (lambda ()
+                      (unless (gearp! :editing mermaid -display-line-numbers)
+                        (display-line-numbers-mode))))
+  :init
+  ;; Rendering is provisioned explicitly by `backpack ensure'.
+  (setq pele-module-auto-install nil))
 
-(leaf ob-mermaid
-  :doc "org-babel support for mermaid diagrams"
-  :url "https://github.com/arnm/ob-mermaid"
+(leaf ob-pele
+  :doc "Org previews and Babel rendering for Mermaid diagrams via Pele"
   :when (and (gearp! :editing org) (gearp! :editing mermaid))
   :after org
-  :ensure (ob-mermaid :ref "30c2da02e3d24dbec0d004d3c6dfe7b381500b05" :host github :repo "arnm/ob-mermaid")
-  :doctor ("mmdc" . "mermaid-cli, required to render mermaid diagrams")
+  :require t
+  :hook (org-mode-hook . pele-org-mode)
   :config
-  (org-babel-do-load-languages
-   'org-babel-load-languages (append org-babel-load-languages '((mermaid . t)))))
+  (require 'pele)
+  (pele-babel-enable-mermaid))

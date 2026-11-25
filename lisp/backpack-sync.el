@@ -40,6 +40,9 @@
 (defvar backpack-user-dir nil
   "Location of the user's private configuration.")
 
+(require 'backpack-platform)
+(require 'subr-x)
+
 (declare-function backpack-sync-mode-p "backpack")
 (declare-function backpack-normal-mode-p "backpack")
 (declare-function backpack-gc-mode-p "backpack-gc")
@@ -401,6 +404,141 @@ Packages in `backpack--enable-on-sync-packages' will still have their forms run.
       (funcall orig-fn q)))
 
   (advice-add 'elpaca--finalize-queue :around #'backpack--elpaca-skip-forms-in-sync-mode))
+
+;;; Pele native module provisioning
+
+(defvar pele-module-auto-install)
+(defvar pele--directory)
+(declare-function pele--module-file "pele-module")
+(declare-function pele-download-module "pele-module")
+
+(defun backpack--pele-build-stamp-file (source-dir)
+  "Return the revision-stamp path for Pele's build in SOURCE-DIR."
+  (expand-file-name ".pele-native-build-ref" source-dir))
+
+(defun backpack--pele-source-revision (source-dir)
+  "Return the Git HEAD revision in Pele SOURCE-DIR."
+  (let ((default-directory source-dir))
+    (with-temp-buffer
+      (unless (eql 0 (process-file "git" nil t nil "rev-parse" "HEAD"))
+        (error "Could not read Pele's source revision: %s" (buffer-string)))
+      (string-trim (buffer-string)))))
+
+(defun backpack--pele-module-file-if-available (source-dir)
+  "Return a resolvable Pele module for SOURCE-DIR's revision, or nil.
+Do not trigger network installation while checking availability. Pele validates
+its versioned download cache; local builds additionally need a matching stamp."
+  (when (fboundp 'pele--module-file)
+    (let ((pele-module-auto-install nil))
+      (condition-case nil
+          (let* ((file (pele--module-file))
+                 (local-module (expand-file-name (concat "pele-native" module-file-suffix)
+                                                 pele--directory)))
+            (when (and (stringp file) (file-exists-p file))
+              (if (equal (file-truename file) (file-truename local-module))
+                  (when (and source-dir
+                             (file-exists-p (backpack--pele-build-stamp-file source-dir))
+                             (with-temp-buffer
+                               (insert-file-contents
+                                (backpack--pele-build-stamp-file source-dir))
+                               (equal (string-trim (buffer-string))
+                                      (backpack--pele-source-revision source-dir))))
+                    file)
+                file)))
+        (error nil)))))
+
+(defun backpack--run-pele-make (source-dir)
+  "Build Pele in SOURCE-DIR and return a plist with status, output, and module."
+  (let ((default-directory source-dir)
+        (emacs-executable (expand-file-name invocation-name invocation-directory))
+        status output)
+    (with-temp-buffer
+      (setq status
+            (condition-case err
+                (process-file "make" nil t nil "-B" (concat "EMACS=" emacs-executable))
+              (error
+               (insert (error-message-string err))
+               127))
+            output (buffer-string)))
+    (list :status status
+          :output output
+          :module (expand-file-name (concat "pele-native" module-file-suffix)
+                                    source-dir))))
+
+(defun backpack--compile-pele-module (source-dir)
+  "Compile Pele from SOURCE-DIR and place the module where Pele loads it."
+  (unless module-file-suffix
+    (error "Pele requires Emacs built with dynamic module support"))
+  (let* ((revision (backpack--pele-source-revision source-dir))
+         (result (backpack--run-pele-make source-dir))
+         (source-module (plist-get result :module))
+         (runtime-module (expand-file-name (concat "pele-native" module-file-suffix)
+                                           pele--directory)))
+    (unless (and (eql 0 (plist-get result :status))
+                 (file-exists-p source-module))
+      (error "Pele native build failed (status %s):\n%s"
+             (plist-get result :status)
+             (or (plist-get result :output) "(no build output)")))
+    (unless (equal (file-truename source-module) (file-truename runtime-module))
+      (copy-file source-module runtime-module t))
+    (with-temp-file (backpack--pele-build-stamp-file source-dir)
+      (insert revision "\n"))
+    (or (backpack--pele-module-file-if-available source-dir)
+        (error "Pele build succeeded but its module is not resolvable from %s"
+               pele--directory))))
+
+(defun backpack--pele-platform-supported-p ()
+  "Return non-nil when Pele upstream supports source builds on this system."
+  (memq system-type '(darwin gnu/linux)))
+
+(defun backpack--prepare-pele-module ()
+  "Ensure Pele has a loadable native module in sync mode."
+  (when (and (backpack-sync-mode-p) (gearp! :editing mermaid))
+    (unless (backpack--pele-platform-supported-p)
+      (error "Pele has no upstream source build or prebuilt module for %s; Mermaid rendering is unsupported without mmdc"
+             system-type))
+    (unless module-file-suffix
+      (error "The enabled Mermaid gear requires an Emacs build with dynamic module support"))
+    (let* ((entry (elpaca-get 'pele))
+           (source-dir (and entry (elpaca<-source-dir entry))))
+      (unless entry
+        (error "Pele is enabled but no Elpaca package entry was queued"))
+      (backpack--activate-package 'pele)
+      (unless (featurep 'pele)
+        (error "Pele could not be activated after its Elpaca build"))
+      (require 'pele-module)
+      (if (backpack--pele-module-file-if-available source-dir)
+          (message "Backpack: Pele native module is already available")
+        (message "Backpack: Compiling Pele's native module...")
+        (condition-case build-error
+            (progn
+              (unless (and source-dir
+                           (file-exists-p (expand-file-name "Makefile" source-dir)))
+                (error "Cannot find Pele's Makefile in Elpaca source directory: %s"
+                       source-dir))
+              (backpack--compile-pele-module source-dir)
+              (message "Backpack: Pele native module compiled successfully"))
+          (error
+           (let ((build-message (error-message-string build-error)))
+             (display-warning
+              'backpack
+              (format "Pele native module compilation failed; output follows:\n%s"
+                      build-message)
+              :warning)
+             (if backpack--system-nixos-p
+                 (error "Pele native module build failed on NixOS; prebuilt downloads are disabled. Check the Nix build dependencies.\n%s"
+                        build-message)
+               (message "Backpack: Trying Pele's verified prebuilt module...")
+               (condition-case download-error
+                   (progn
+                     (pele-download-module)
+                     (unless (backpack--pele-module-file-if-available source-dir)
+                       (error "Downloaded module is not resolvable by Pele"))
+                     (message "Backpack: Pele prebuilt module installed successfully"))
+                 (error
+                  (error "Pele module provisioning failed. Build error:\n%s\nPrebuilt download error:\n%s"
+                         build-message
+                         (error-message-string download-error))))))))))))
 
 ;;; Interactive ensure command
 

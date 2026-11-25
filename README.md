@@ -64,6 +64,26 @@ Some features are turned on by default if some gear is activated. To turn them o
 
 Please do the above. It helps speed up the initialization of Emacs and run functions that won't be called in a normal execution of Emacs. When running `backpack ensure` you are supposed to see the elpaca logging its progress, among many other things, and then Emacs exiting.
 
+### Mermaid diagrams with Pele
+
+Enable the `mermaid` gear under `:editing` to use Pele for `.mmd`/`.mermaid` editing. When the `org` gear is enabled too, Mermaid Org blocks get live SVG previews and Babel execution through Pele:
+
+```elisp
+(gear! :editing org mermaid)
+```
+
+`backpack ensure` provisions Pele's native renderer after installing the pinned Elisp package. It skips provisioning if Pele already resolves a compatible module; otherwise it tries to compile Pele's module with `make` using the same Emacs executable. A successful build is placed where the loaded Elpaca copy of Pele can find it. If compilation fails on a supported non-NixOS system, Backpack prints the build warning/output and tries Pele's verified prebuilt download (HTTPS and the system `tar` command are required). A failed fallback aborts `ensure` with an error. Startup itself does not compile or download anything.
+
+On NixOS, Backpack never downloads Pele's prebuilt Linux artifact as a fallback. It reuses a module already resolved by Pele; if none is available, `ensure` attempts a local source build and reports the compiler output if it fails. Run `backpack ensure` in an environment that provides:
+
+- GNU Make, a C compiler with pthreads, and Python 3.10 or newer;
+- Emacs built with dynamic-module support and its `emacs-module.h` headers;
+- optionally `pkg-config`, Pango and fontconfig for native text measurement (without Pango, Pele uses its width estimates).
+
+For example, a Nix shell can supply `gnumake`, `gcc`, `python3`, `pkg-config`, `pango` and `fontconfig` while using the same Nix Emacs that Backpack runs. Pele vendors the renderer and QuickJS, so the build does not require Node.js, a browser or Mermaid CLI.
+
+Upstream currently publishes prebuilt modules for macOS 12+ and Linux with glibc 2.35+ on ARM64 and x86-64; previews additionally require SVG image support. Pele upstream does not currently announce a Windows source build or prebuilt module. Because this gear no longer uses `mmdc`, `backpack ensure` fails with an unsupported-platform diagnostic on Windows or other unsupported systems.
+
 ### Finding out what is available in your Backpack
 
 Press `C-h I` or run `M-x backpack-inventory` to browse all available pouches, gears and flags interactively. The inventory shows what's enabled in your configuration, what's available, and how to configure each feature -- including flags, external tools, required fonts, and pinned package versions.
