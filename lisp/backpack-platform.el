@@ -25,18 +25,32 @@
 
 ;;; Code:
 
+(defconst backpack--nixos-marker-file "/etc/NIXOS"
+  "NixOS release marker used by `backpack--detect-system'.")
+
+(defun backpack--detect-system ()
+  "Return system features for `system-type', including the NixOS marker."
+  (let ((systems
+         (pcase system-type
+           ('darwin '(macos bsd))
+           ((or 'cygwin 'windows-nt 'ms-dos) '(windows))
+           ((or 'gnu 'gnu/linux) '(gnu))
+           ((or 'gnu/kfreebsd 'berkeley-unix) '(gnu bsd))
+           ('android '(android)))))
+    (when (and (eq system-type 'gnu/linux)
+               (file-exists-p backpack--nixos-marker-file))
+      (setq systems (append systems '(nixos))))
+    systems))
+
 (defconst backpack-system
-  (pcase system-type
-    ('darwin '(macos bsd))
-    ((or 'cygwin 'windows-nt 'ms-dos) '(windows))
-    ((or 'gnu 'gnu/linux) '(gnu))
-    ((or 'gnu/kfreebsd 'berkeley-unix) '(gnu bsd))
-    ('android '(android)))
+  (backpack--detect-system)
   "The operating system Emacs is running on.")
 
-(defconst backpack--system-windows-p (eq 'windows (car backpack-system)))
-(defconst backpack--system-macos-p (eq 'macos (car backpack-system)))
-(defconst backpack--system-gnu-p (eq 'gnu (car backpack-system)))
+(defconst backpack--system-windows-p (and (memq 'windows backpack-system) t))
+(defconst backpack--system-macos-p (and (memq 'macos backpack-system) t))
+(defconst backpack--system-gnu-p (and (memq 'gnu backpack-system) t))
+(defconst backpack--system-nixos-p (and (memq 'nixos backpack-system) t)
+  "Non-nil when Emacs is running on NixOS.")
 
 (when (and backpack--system-gnu-p
 	   (getenv-internal "WSLENV"))
