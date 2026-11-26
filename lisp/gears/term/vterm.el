@@ -1,5 +1,10 @@
 ;; -*- lexical-binding: t; -*-
 
+(defun gear--compile-vterm-native-module (context)
+  "Compile the native module for vterm"
+  ;; TODO: check if the refs are different and compile the module and put it where vterm package expects it
+  (error "not implemented"))
+
 ;; -- Toggle & project helpers --
 
 (defun backpack/vterm-toggle ()
@@ -44,7 +49,9 @@ Creates a per-project buffer named *vterm:<project>*."
   :doc "Fully-featured terminal emulator based on libvterm"
   :when (gearp! :term vterm)
   :ensure (vterm :ref "70921114908ebb260d6686db8cbe2445a64f90a2")
+  :native-module gear--compile-vterm-native-module
   :doctor ("cmake"   . ("needed to compile vterm's C module" required))
+  :doctor ("make"    . ("needed to build vterm's C module" required))
   :doctor ("libtool" . ("needed to compile vterm's C module" required))
   :bind
   ("C-c t v" . backpack/vterm-toggle)
@@ -76,7 +83,7 @@ Creates a per-project buffer named *vterm:<project>*."
             (lambda ()
               ;; Ensure the process uses UTF-8
               (set-process-coding-system (get-buffer-process (current-buffer))
-                                        'utf-8-unix 'utf-8-unix)
+                                         'utf-8-unix 'utf-8-unix)
               ;; Close window when buffer is manually killed
               (add-hook 'kill-buffer-hook
                         (lambda ()

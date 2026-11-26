@@ -168,6 +168,7 @@ Each entry maps a package symbol to a plist with :old-ref and :ref.")
 (require 'backpack-defaults)
 (require 'backpack-buffers)
 (require 'backpack-sync)
+(backpack--register-native-module-leaf-keyword)
 (require 'backpack-gc)
 
 ;;
@@ -374,6 +375,7 @@ The behavior depends on `backpack-mode':
 
 (defun backpack-load-gear-files ()
   "Load all gears available."
+  (setq backpack--native-module-builders nil)
   (load (expand-file-name "gears/config/default" backpack-core-dir))
   (load (expand-file-name "gears/ui/theme" backpack-core-dir))
   (load (expand-file-name "gears/ui/treesit" backpack-core-dir))

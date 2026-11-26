@@ -43,6 +43,12 @@
 (defvar backpack--package-ref-state-file nil
   "Single `.eld' state file containing refs for all Elpaca packages.")
 
+(defvar backpack--native-module-builders nil
+  "Alist of (PACKAGE . BUILDER) declarations from `:native-module'.")
+
+(defvar leaf-keywords)
+(declare-function leaf-insert-list-before "leaf-keywords")
+
 (require 'backpack-platform)
 (require 'subr-x)
 
@@ -244,6 +250,47 @@ In normal mode, this just loads elpaca if it's already built."
                          "Elpaca is not installed. Run 'backpack ensure' first."
                          :error))))))
 
+;;; Native module builder declarations
+
+(defun backpack--register-native-module-leaf-keyword ()
+  "Register Backpack's `:native-module' Leaf keyword before `:elpaca'."
+  (unless (plist-member leaf-keywords :native-module)
+    (setq leaf-keywords
+          (leaf-insert-list-before
+           leaf-keywords :elpaca
+           (list :native-module
+                 '`((backpack--native-module-register ',leaf--name
+                                                     ',leaf--value
+                                                     ',leaf--raw)
+                    ,@leaf--body))))))
+
+(defun backpack--native-module-register (leaf-name callback-values leaf-raw)
+  "Register the single CALLBACK-VALUES builder for LEAF-NAME.
+LEAF-RAW is Leaf's normalized full keyword plist; it must contain exactly
+one `:elpaca' recipe so the builder can be associated with its package.
+This function only records the declaration; it never invokes the builder."
+  (let* ((orders (plist-get leaf-raw :elpaca))
+         (order (and (proper-list-p orders)
+                     (= (length orders) 1)
+                     (car orders)))
+         (package (cond ((symbolp order) order)
+                        ((consp order) (car-safe order))))
+         (builder (and (proper-list-p callback-values)
+                       (= (length callback-values) 1)
+                       (car callback-values))))
+    (unless (and package (symbolp package) (symbolp builder) builder)
+      (error "Backpack :native-module in leaf %s requires one callback and exactly one :ensure package"
+             leaf-name))
+    (let ((registered (assq package backpack--native-module-builders)))
+      (cond
+       ((null registered)
+        (push (cons package builder) backpack--native-module-builders))
+       ((eq builder (cdr registered))
+        nil)
+       (t
+        (error "Backpack :native-module has multiple builders for package %s"
+               package))))))
+
 ;;; Installed package ref registry
 
 (defun backpack--package-ref-read-state ()
@@ -309,6 +356,57 @@ Update the shared state file once after processing the whole queue."
     (when changed
       (backpack--package-ref-write-state state))))
 
+(defun backpack--native-module-builder-for-recipe (recipe)
+  "Return the registered native module builder for RECIPE, if any."
+  (let ((package (plist-get recipe :package)))
+    (when package
+      (cdr (assq (if (symbolp package) package (intern package))
+                 backpack--native-module-builders)))))
+
+(defun backpack--native-module-build-step (elpaca)
+  "Run ELPACA's registered native module builder as its final build step."
+  (let* ((package (elpaca<-id elpaca))
+         (builder (cdr (assq package backpack--native-module-builders))))
+    (unless builder
+      (error "No :native-module builder registered for package %s" package))
+    (unless module-file-suffix
+      (error "Package %s declares a native module, but this Emacs lacks dynamic module support"
+             package))
+    (unless (functionp builder)
+      (error "Native module builder %S for package %s is not defined"
+             builder package))
+    (let ((context
+           (append (list :package package
+                         :source-dir (elpaca<-source-dir elpaca)
+                         :build-dir (elpaca<-build-dir elpaca)
+                         :module-file-suffix module-file-suffix
+                         :emacs-version emacs-version
+                         :system-type system-type)
+                   (backpack--package-ref-transition elpaca))))
+      (elpaca-note elpaca (format "Running native module builder %s" builder))
+      (funcall builder context))
+    (elpaca-continue elpaca)))
+
+(defun backpack-process-call (directory program &rest args)
+  "Run PROGRAM with ARGS in DIRECTORY and return a result plist.
+The result has :status, :stdout, and :stderr keys.  This is Backpack's
+process facade for package builders; gears should not call Elpaca's process
+functions directly."
+  (unless (and (stringp directory) (file-directory-p directory))
+    (error "Backpack process directory does not exist: %s" directory))
+  (let ((default-directory directory))
+    (condition-case err
+        (let* ((result (apply #'elpaca-process-call program args))
+               (status (car-safe result)))
+          (if (numberp status)
+              (list :status status
+                    :stdout (or (nth 1 result) "")
+                    :stderr (or (nth 2 result) ""))
+            (list :status nil :stdout "" :stderr (format "%S" result))))
+      (error
+       (list :status nil :stdout ""
+             :stderr (error-message-string err))))))
+
 ;;; Package ref change detection
 
 (defun backpack--ref-needs-update-p (repo-dir requested-ref)
@@ -329,44 +427,49 @@ Uses `elpaca-process-call' for cross-platform git invocation."
         (error t)))))
 
 (defun backpack--recipe-force-rebuild-on-ref-change (recipe)
-  "Modify RECIPE to force rebuild if the ref has changed.
-In sync mode, checks if the requested :ref differs from the currently
-checked out commit.  If so, returns :build substitution rules that fetch,
-checkout, and rebuild the package (the new elpaca expresses :build as
-substitution rules, not as an explicit step list).  The recipe's own
-:build rules are preserved so package-specific steps (e.g. the pdf-tools
-epdfinfo compile step) still run on rebuild."
+  "Modify RECIPE for ref changes and its registered native builder.
+In sync mode, force a source/build refresh when the requested :ref differs
+from the checked out commit.  If RECIPE has a `:native-module' builder,
+append its runner as a `:last' substitution so it runs for both new and
+pre-built packages.  Preserve recipe-declared :build rules in either case."
   (when (backpack-sync-mode-p)
     (let* ((package (plist-get recipe :package))
            (requested-ref (plist-get recipe :ref))
            (declared-build (plist-get recipe :build))
+           (native-builder (backpack--native-module-builder-for-recipe recipe))
            (repo-dir (when package
                        (or (when (and (plist-get recipe :repo)
                                       (fboundp 'elpaca-git-repo-dir))
                              (condition-case nil
                                  (elpaca-git-repo-dir recipe)
                                (error nil)))
-                           (expand-file-name package elpaca-sources-directory)))))
-      (when (and requested-ref
-                 (backpack--ref-needs-update-p repo-dir requested-ref))
+                           (expand-file-name package elpaca-sources-directory))))
+           (ref-changed (and requested-ref
+                             (backpack--ref-needs-update-p repo-dir requested-ref)))
+           rules)
+      (when ref-changed
         (message "Backpack: Ref changed for '%s', will fetch and rebuild" package)
-        (let ((rules (list '(:not elpaca-queue-dependencies elpaca-activate)
-                           '(:first elpaca-git--fetch
-                                    elpaca-git--checkout-ref
-                                    elpaca-queue-dependencies
-                                    elpaca-check-version
-                                    elpaca-build-link
-                                    elpaca-build-autoloads
-                                    elpaca-build-compile
-                                    elpaca-build-docs))))
-          ;; Preserve the recipe's own :build rule(s) (e.g. the pdf-tools
-          ;; epdfinfo compile step) so they still apply on rebuild.
-          (when declared-build
-            (setq rules (append rules
-                                (if (keywordp (car-safe declared-build))
-                                    (list declared-build) ; single rule
-                                  declared-build))))
-          `(:build ,rules))))))
+        (setq rules (list '(:not elpaca-queue-dependencies elpaca-activate)
+                          '(:first elpaca-git--fetch
+                                   elpaca-git--checkout-ref
+                                   elpaca-queue-dependencies
+                                   elpaca-check-version
+                                   elpaca-build-link
+                                   elpaca-build-autoloads
+                                   elpaca-build-compile
+                                   elpaca-build-docs))))
+      ;; If we modify :build, carry through the recipe's own rules, including
+      ;; native/external build steps such as pdf-tools' epdfinfo compilation.
+      (when (and declared-build (or ref-changed native-builder))
+        (setq rules
+              (append rules
+                      (if (keywordp (car-safe declared-build))
+                          (list declared-build)
+                        declared-build))))
+      (when native-builder
+        (setq rules (append rules
+                            '((:last backpack--native-module-build-step)))))
+      (when rules `(:build ,rules)))))
 
 (defun backpack--recipe-skip-unbuilt-in-normal-mode (recipe)
   "Modify RECIPE to skip building in normal mode if package isn't already built.
@@ -473,141 +576,6 @@ Packages in `backpack--enable-on-sync-packages' will still have their forms run.
       (funcall orig-fn q)))
 
   (advice-add 'elpaca--finalize-queue :around #'backpack--elpaca-skip-forms-in-sync-mode))
-
-;;; Pele native module provisioning
-
-(defvar pele-module-auto-install)
-(defvar pele--directory)
-(declare-function pele--module-file "pele-module")
-(declare-function pele-download-module "pele-module")
-
-(defun backpack--pele-build-stamp-file (source-dir)
-  "Return the revision-stamp path for Pele's build in SOURCE-DIR."
-  (expand-file-name ".pele-native-build-ref" source-dir))
-
-(defun backpack--pele-source-revision (source-dir)
-  "Return the Git HEAD revision in Pele SOURCE-DIR."
-  (let ((default-directory source-dir))
-    (with-temp-buffer
-      (unless (eql 0 (process-file "git" nil t nil "rev-parse" "HEAD"))
-        (error "Could not read Pele's source revision: %s" (buffer-string)))
-      (string-trim (buffer-string)))))
-
-(defun backpack--pele-module-file-if-available (source-dir)
-  "Return a resolvable Pele module for SOURCE-DIR's revision, or nil.
-Do not trigger network installation while checking availability. Pele validates
-its versioned download cache; local builds additionally need a matching stamp."
-  (when (fboundp 'pele--module-file)
-    (let ((pele-module-auto-install nil))
-      (condition-case nil
-          (let* ((file (pele--module-file))
-                 (local-module (expand-file-name (concat "pele-native" module-file-suffix)
-                                                 pele--directory)))
-            (when (and (stringp file) (file-exists-p file))
-              (if (equal (file-truename file) (file-truename local-module))
-                  (when (and source-dir
-                             (file-exists-p (backpack--pele-build-stamp-file source-dir))
-                             (with-temp-buffer
-                               (insert-file-contents
-                                (backpack--pele-build-stamp-file source-dir))
-                               (equal (string-trim (buffer-string))
-                                      (backpack--pele-source-revision source-dir))))
-                    file)
-                file)))
-        (error nil)))))
-
-(defun backpack--run-pele-make (source-dir)
-  "Build Pele in SOURCE-DIR and return a plist with status, output, and module."
-  (let ((default-directory source-dir)
-        (emacs-executable (expand-file-name invocation-name invocation-directory))
-        status output)
-    (with-temp-buffer
-      (setq status
-            (condition-case err
-                (process-file "make" nil t nil "-B" (concat "EMACS=" emacs-executable))
-              (error
-               (insert (error-message-string err))
-               127))
-            output (buffer-string)))
-    (list :status status
-          :output output
-          :module (expand-file-name (concat "pele-native" module-file-suffix)
-                                    source-dir))))
-
-(defun backpack--compile-pele-module (source-dir)
-  "Compile Pele from SOURCE-DIR and place the module where Pele loads it."
-  (unless module-file-suffix
-    (error "Pele requires Emacs built with dynamic module support"))
-  (let* ((revision (backpack--pele-source-revision source-dir))
-         (result (backpack--run-pele-make source-dir))
-         (source-module (plist-get result :module))
-         (runtime-module (expand-file-name (concat "pele-native" module-file-suffix)
-                                           pele--directory)))
-    (unless (and (eql 0 (plist-get result :status))
-                 (file-exists-p source-module))
-      (error "Pele native build failed (status %s):\n%s"
-             (plist-get result :status)
-             (or (plist-get result :output) "(no build output)")))
-    (unless (equal (file-truename source-module) (file-truename runtime-module))
-      (copy-file source-module runtime-module t))
-    (with-temp-file (backpack--pele-build-stamp-file source-dir)
-      (insert revision "\n"))
-    (or (backpack--pele-module-file-if-available source-dir)
-        (error "Pele build succeeded but its module is not resolvable from %s"
-               pele--directory))))
-
-(defun backpack--pele-platform-supported-p ()
-  "Return non-nil when Pele upstream supports source builds on this system."
-  (memq system-type '(darwin gnu/linux)))
-
-(defun backpack--prepare-pele-module ()
-  "Ensure Pele has a loadable native module in sync mode."
-  (when (and (backpack-sync-mode-p) (gearp! :editing mermaid))
-    (unless (backpack--pele-platform-supported-p)
-      (error "Pele has no upstream source build or prebuilt module for %s; Mermaid rendering is unsupported without mmdc"
-             system-type))
-    (unless module-file-suffix
-      (error "The enabled Mermaid gear requires an Emacs build with dynamic module support"))
-    (let* ((entry (elpaca-get 'pele))
-           (source-dir (and entry (elpaca<-source-dir entry))))
-      (unless entry
-        (error "Pele is enabled but no Elpaca package entry was queued"))
-      (backpack--activate-package 'pele)
-      (unless (featurep 'pele)
-        (error "Pele could not be activated after its Elpaca build"))
-      (require 'pele-module)
-      (if (backpack--pele-module-file-if-available source-dir)
-          (message "Backpack: Pele native module is already available")
-        (message "Backpack: Compiling Pele's native module...")
-        (condition-case build-error
-            (progn
-              (unless (and source-dir
-                           (file-exists-p (expand-file-name "Makefile" source-dir)))
-                (error "Cannot find Pele's Makefile in Elpaca source directory: %s"
-                       source-dir))
-              (backpack--compile-pele-module source-dir)
-              (message "Backpack: Pele native module compiled successfully"))
-          (error
-           (let ((build-message (error-message-string build-error)))
-             (display-warning
-              'backpack
-              (format "Pele native module compilation failed; output follows:\n%s"
-                      build-message)
-              :warning)
-             (if backpack--system-nixos-p
-                 (error "Pele native module build failed on NixOS; prebuilt downloads are disabled. Check the Nix build dependencies.\n%s"
-                        build-message)
-               (message "Backpack: Trying Pele's verified prebuilt module...")
-               (condition-case download-error
-                   (progn
-                     (pele-download-module)
-                     (unless (backpack--pele-module-file-if-available source-dir)
-                       (error "Downloaded module is not resolvable by Pele"))
-                     (message "Backpack: Pele prebuilt module installed successfully"))
-                 (error
-                  (error "Pele module provisioning failed. Build error:\n%s\nPrebuilt download error:\n%s"
-                         build-message
-                         (error-message-string download-error))))))))))))
 
 ;;; Interactive ensure command
 

@@ -64,25 +64,25 @@ Some features are turned on by default if some gear is activated. To turn them o
 
 Please do the above. It helps speed up the initialization of Emacs and run functions that won't be called in a normal execution of Emacs. When running `backpack ensure` you are supposed to see the elpaca logging its progress, among many other things, and then Emacs exiting.
 
-### Mermaid diagrams with Pele
+### Native modules in gear callbacks
 
-Enable the `mermaid` gear under `:editing` to use Pele for `.mmd`/`.mermaid` editing. When the `org` gear is enabled too, Mermaid Org blocks get live SVG previews and Babel execution through Pele:
+A gear can declare a `:native-module` callback on a Leaf block that has exactly one `:ensure` package. The callback must be a function symbol defined by the gear and accepts one argument, `context`:
 
 ```elisp
-(gear! :editing org mermaid)
+(defun my-package-build-native-module (context)
+  ;; Package-specific build logic belongs here, in the gear.
+  ...)
+
+(leaf my-package
+  :ensure (my-package :ref "pinned-commit")
+  :native-module my-package-build-native-module)
 ```
 
-`backpack ensure` provisions Pele's native renderer after installing the pinned Elisp package. It skips provisioning if Pele already resolves a compatible module; otherwise it tries to compile Pele's module with `make` using the same Emacs executable. A successful build is placed where the loaded Elpaca copy of Pele can find it. If compilation fails on a supported non-NixOS system, Backpack prints the build warning/output and tries Pele's verified prebuilt download (HTTPS and the system `tar` command are required). A failed fallback aborts `ensure` with an error. Startup itself does not compile or download anything.
+During `backpack ensure`, Backpack invokes that callback as the final Elpaca build step, including for already-built packages. The callback receives a plist with `:package` (package symbol), `:source-dir`, `:build-dir`, `:module-file-suffix`, `:emacs-version`, `:system-type`, `:old-ref` and `:new-ref`. `:old-ref` and `:new-ref` describe Backpack's recorded and requested package refs. The module suffix is nil when the running Emacs lacks dynamic-module support, in which case the build fails before calling the callback.
 
-On NixOS, Backpack never downloads Pele's prebuilt Linux artifact as a fallback. It reuses a module already resolved by Pele; if none is available, `ensure` attempts a local source build and reports the compiler output if it fails. Run `backpack ensure` in an environment that provides:
+Callbacks should inspect the package source and use the supplied context to perform package-specific work. They can use `backpack-process-call` to run a program in a directory; it returns `:status`, `:stdout` and `:stderr` in a plist. All package-specific build logic stays in the gear; Backpack does not activate packages during ensure or implement special handling for individual packages. A callback error fails its Elpaca build entry. Callbacks are trusted Elisp and must not explicitly load or activate the package they are building.
 
-- GNU Make, a C compiler with pthreads, and Python 3.10 or newer;
-- Emacs built with dynamic-module support and its `emacs-module.h` headers;
-- optionally `pkg-config`, Pango and fontconfig for native text measurement (without Pango, Pele uses its width estimates).
-
-For example, a Nix shell can supply `gnumake`, `gcc`, `python3`, `pkg-config`, `pango` and `fontconfig` while using the same Nix Emacs that Backpack runs. Pele vendors the renderer and QuickJS, so the build does not require Node.js, a browser or Mermaid CLI.
-
-Upstream currently publishes prebuilt modules for macOS 12+ and Linux with glibc 2.35+ on ARM64 and x86-64; previews additionally require SVG image support. Pele upstream does not currently announce a Windows source build or prebuilt module. Because this gear no longer uses `mmdc`, `backpack ensure` fails with an unsupported-platform diagnostic on Windows or other unsupported systems.
+Package-specific setup instructions and implementation belong in the corresponding gear. The `mermaid` gear currently declares Pele's package and native-module callback; the callback implementation is still in progress.
 
 ### Finding out what is available in your Backpack
 

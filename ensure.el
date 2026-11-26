@@ -4,8 +4,8 @@
 ;; 1. Installs elpaca from base-packages (no internet required for elpaca itself)
 ;; 2. Installs all missing packages needed by enabled gears
 ;; 3. Builds and byte-compiles packages
-;; 4. Prepares the Pele native module when the Mermaid gear is enabled
-;; 5. Does NOT activate other packages (that happens in normal mode)
+;; 4. Runs native-module callbacks declared by enabled gears
+;; 5. Does NOT activate packages (that happens in normal mode)
 ;;
 ;; Usage: emacs --batch --eval "(setq user-emacs-directory \"/path/to/emacs-backpack/\")" -l ensure.el
 
@@ -209,9 +209,6 @@ EVENT is an `elpaca-event' struct from `elpaca--event-log'."
 ;; This also activates enable-on-sync packages before their deferred
 ;; forms run and before treesit grammars are installed.
 (backpack--wait-with-progress)
-
-;; Pele needs a native module in addition to its Elisp package.
-(backpack--prepare-pele-module)
 
 ;; After elpaca-wait completes, run our finalization
 ;; (elpaca-after-init-hook doesn't run when using elpaca-wait in batch mode)

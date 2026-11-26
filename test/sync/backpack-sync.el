@@ -6,17 +6,64 @@
 (require 'cl-lib)
 
 (add-to-list 'load-path (expand-file-name "lisp" backpack-emacs-dir))
+(add-to-list 'load-path (expand-file-name "base-packages/leaf.el" backpack-emacs-dir))
+(add-to-list 'load-path (expand-file-name "base-packages/leaf-keywords.el" backpack-emacs-dir))
 (add-to-list 'load-path (expand-file-name "base-packages/elpaca" backpack-emacs-dir))
+(require 'leaf)
+(require 'leaf-keywords)
+(leaf-keywords-init)
+(plist-put leaf-keywords :doctor '`(,@leaf--body))
+(plist-put leaf-keywords :fonts '`(,@leaf--body))
+(setq leaf-alias-keyword-alist '((:ensure . :elpaca)))
 (require 'backpack-pouch)
 (require 'backpack-sync)
+(backpack--register-native-module-leaf-keyword)
 (require 'elpaca)
 
-(defvar pele--directory)
+(defvar backpack-sync-test--native-contexts nil)
+
+(defun backpack-sync-test--native-builder (context)
+  "Record CONTEXT to prove Backpack invokes the registered builder."
+  (push context backpack-sync-test--native-contexts))
+
+(defun backpack-sync-test--native-builder-fails (context)
+  "Signal a synthetic native build error for CONTEXT."
+  (error "synthetic native build failure for %s"
+         (plist-get context :package)))
+
+(defun backpack-sync-test--native-elpaca-entry (package source-dir build-dir ref)
+  "Create a minimal Elpaca entry for PACKAGE and REF."
+  (elpaca<--create :id package
+                   :package (symbol-name package)
+                   :source-dir source-dir
+                   :build-dir build-dir
+                   :recipe (list :package (symbol-name package) :ref ref)))
 
 (defun backpack-sync-test--with-elpaca-process-file (directory)
   "Create the file used to validate Elpaca source DIRECTORY."
   (with-temp-file (expand-file-name "elpaca-process.el" directory)
     (insert ";;; test fixture\n")))
+
+(ert-deftest backpack-sync-native-module-leaf-keyword-registers-before-elpaca ()
+  "Expand the keyword into a declaration before Elpaca defers package forms."
+  (let* ((backpack--native-module-builders nil)
+         (backpack-sync-test--native-contexts nil)
+         (expanded (macroexpand
+                    '(leaf native-demo
+                       :ensure (native-demo :ref "pin-a")
+                       :native-module backpack-sync-test--native-builder)))
+         (leaf-protect (nth 3 expanded))
+         (registration (nth 2 leaf-protect))
+         (elpaca-form (nth 3 leaf-protect))
+         (expanded-string (prin1-to-string expanded)))
+    (should (eq (car registration) 'backpack--native-module-register))
+    (should (eq (car elpaca-form) 'elpaca))
+    (should (< (string-match "backpack--native-module-register" expanded-string)
+               (string-match "(elpaca (native-demo" expanded-string)))
+    (eval registration)
+    (should (equal '((native-demo . backpack-sync-test--native-builder))
+                   backpack--native-module-builders))
+    (should-not backpack-sync-test--native-contexts)))
 
 (ert-deftest backpack-sync-org-build-dir-falls-back-without-queued-elpaca ()
   "Use Backpack's Elpaca checkout when no Elpaca queue entry exists."
@@ -75,229 +122,6 @@
                          (elpaca<-source-dir observed-entry))))
       (delete-directory fallback-dir t))))
 
-(defun backpack-sync-test--with-pele-state (source-dir module-file nixos thunk &optional runtime-dir)
-  "Run THUNK with a simulated enabled Pele gear and Elpaca package entry."
-  (let ((backpack--gear '(:editing mermaid))
-        (backpack--system-nixos-p nixos)
-        (system-type 'gnu/linux)
-        (module-file-suffix ".so")
-        (pele--directory (or runtime-dir (file-name-directory module-file)))
-        (features (copy-sequence features)))
-    (provide 'pele)
-    (provide 'pele-module)
-    (cl-letf (((symbol-function 'backpack-sync-mode-p) (lambda () t))
-              ((symbol-function 'elpaca-get) (lambda (_package) 'pele-entry))
-              ((symbol-function 'elpaca<-source-dir) (lambda (_entry) source-dir))
-              ((symbol-function 'backpack--activate-package)
-               (lambda (_package) (provide 'pele)))
-              ((symbol-function 'pele--module-file)
-               (lambda () (and (file-exists-p module-file) module-file)))
-              ((symbol-function 'backpack--pele-source-revision)
-               (lambda (_source-dir) "fixture-revision")))
-      (funcall thunk))))
-
-(ert-deftest backpack-sync-pele-available-module-skips-build-and-download ()
-  "Do not rebuild or download when Pele already resolves a module."
-  (let* ((directory (make-temp-file "backpack-sync-pele-" t))
-         (module (expand-file-name "pele-native.so" directory))
-         (build-count 0)
-         (download-count 0))
-    (unwind-protect
-        (progn
-          (with-temp-file module (insert "native module fixture"))
-          (with-temp-file (backpack--pele-build-stamp-file directory)
-            (insert "fixture-revision\n"))
-          (backpack-sync-test--with-pele-state
-           directory module nil
-           (lambda ()
-             (cl-letf (((symbol-function 'backpack--compile-pele-module)
-                        (lambda (_source) (cl-incf build-count)))
-                       ((symbol-function 'pele-download-module)
-                        (lambda () (cl-incf download-count)))
-                       ((symbol-function 'message) (lambda (&rest _args) nil)))
-               (should (equal (backpack--pele-module-file-if-available directory)
-                              module))
-               (backpack--prepare-pele-module))))
-          (should (= build-count 0))
-          (should (= download-count 0)))
-      (delete-directory directory t))))
-
-(ert-deftest backpack-sync-pele-rebuilds-module-from-stale-source-revision ()
-  "Rebuild a local module if its stamp does not match the Elpaca revision."
-  (let* ((directory (make-temp-file "backpack-sync-pele-" t))
-         (module (expand-file-name "pele-native.so" directory))
-         (build-count 0)
-         (download-count 0))
-    (unwind-protect
-        (progn
-          (with-temp-file (expand-file-name "Makefile" directory) (insert "all:\n"))
-          (with-temp-file module (insert "stale native module"))
-          (with-temp-file (backpack--pele-build-stamp-file directory)
-            (insert "old-source-revision\n"))
-          (backpack-sync-test--with-pele-state
-           directory module nil
-           (lambda ()
-             (cl-letf (((symbol-function 'backpack--compile-pele-module)
-                        (lambda (source-dir)
-                          (cl-incf build-count)
-                          (with-temp-file module (insert "current native module"))
-                          (with-temp-file (backpack--pele-build-stamp-file source-dir)
-                            (insert "fixture-revision\n"))))
-                       ((symbol-function 'pele-download-module)
-                        (lambda () (cl-incf download-count)))
-                       ((symbol-function 'message) (lambda (&rest _args) nil)))
-               (backpack--prepare-pele-module))))
-          (should (= build-count 1))
-          (should (= download-count 0)))
-      (delete-directory directory t))))
-
-(ert-deftest backpack-sync-pele-build-success-avoids-download ()
-  "Build Pele when no module is present and do not download after success."
-  (let* ((directory (make-temp-file "backpack-sync-pele-" t))
-         (module (expand-file-name "pele-native.so" directory))
-         (build-count 0)
-         (download-count 0))
-    (unwind-protect
-        (progn
-          (with-temp-file (expand-file-name "Makefile" directory) (insert "all:\n"))
-          (backpack-sync-test--with-pele-state
-           directory module nil
-           (lambda ()
-             (cl-letf (((symbol-function 'backpack--compile-pele-module)
-                        (lambda (source-dir)
-                          (cl-incf build-count)
-                          (with-temp-file module (insert "native module fixture"))
-                          (with-temp-file (backpack--pele-build-stamp-file source-dir)
-                            (insert "fixture-revision\n"))))
-                       ((symbol-function 'pele-download-module)
-                        (lambda () (cl-incf download-count)))
-                       ((symbol-function 'message) (lambda (&rest _args) nil)))
-               (backpack--prepare-pele-module))))
-          (should (= build-count 1))
-          (should (= download-count 0)))
-      (delete-directory directory t))))
-
-(ert-deftest backpack-sync-pele-build-failure-falls-back-off-nixos ()
-  "Warn with compiler details and use Pele's prebuilt module off NixOS."
-  (let* ((directory (make-temp-file "backpack-sync-pele-" t))
-         (module (expand-file-name "prebuilt/pele-native.so" directory))
-         (runtime-dir (expand-file-name "runtime" directory))
-         (download-count 0)
-         warning-text)
-    (unwind-protect
-        (progn
-          (with-temp-file (expand-file-name "Makefile" directory) (insert "all:\n"))
-          (backpack-sync-test--with-pele-state
-           directory module nil
-           (lambda ()
-             (cl-letf (((symbol-function 'backpack--compile-pele-module)
-                        (lambda (_source) (error "synthetic compiler diagnostic")))
-                       ((symbol-function 'pele-download-module)
-                        (lambda ()
-                          (cl-incf download-count)
-                          (make-directory (file-name-directory module) t)
-                          (with-temp-file module (insert "verified module fixture"))))
-                       ((symbol-function 'display-warning)
-                        (lambda (_type text &optional _level) (setq warning-text text)))
-                       ((symbol-function 'message) (lambda (&rest _args) nil)))
-               (backpack--prepare-pele-module)))
-           runtime-dir)
-          (should (= download-count 1))
-          (should (string-match-p "synthetic compiler diagnostic" warning-text)))
-      (delete-directory directory t))))
-
-(ert-deftest backpack-sync-pele-build-failure-on-nixos-does-not-download ()
-  "Fail with the compiler diagnostic and never download on NixOS."
-  (let* ((directory (make-temp-file "backpack-sync-pele-" t))
-         (module (expand-file-name "prebuilt/pele-native.so" directory))
-         (runtime-dir (expand-file-name "runtime" directory))
-         (download-count 0))
-    (unwind-protect
-        (progn
-          (with-temp-file (expand-file-name "Makefile" directory) (insert "all:\n"))
-          (let ((err
-                 (backpack-sync-test--with-pele-state
-                  directory module t
-                  (lambda ()
-                    (cl-letf (((symbol-function 'backpack--compile-pele-module)
-                               (lambda (_source) (error "synthetic Nix build failure")))
-                              ((symbol-function 'pele-download-module)
-                               (lambda () (cl-incf download-count)))
-                              ((symbol-function 'display-warning)
-                               (lambda (&rest _args) nil))
-                              ((symbol-function 'message) (lambda (&rest _args) nil)))
-                      (should-error (backpack--prepare-pele-module))))
-                  runtime-dir)))
-            (should (string-match-p "NixOS" (error-message-string err)))
-            (should (string-match-p "synthetic Nix build failure" (error-message-string err))))
-          (should (= download-count 0)))
-      (delete-directory directory t))))
-
-(ert-deftest backpack-sync-pele-provisioning-reports-fallback-failure ()
-  "Include both build and download errors when neither path succeeds."
-  (let* ((directory (make-temp-file "backpack-sync-pele-" t))
-         (module (expand-file-name "prebuilt/pele-native.so" directory))
-         (runtime-dir (expand-file-name "runtime" directory))
-         err)
-    (unwind-protect
-        (progn
-          (with-temp-file (expand-file-name "Makefile" directory) (insert "all:\n"))
-          (setq err
-                (backpack-sync-test--with-pele-state
-                 directory module nil
-                 (lambda ()
-                   (cl-letf (((symbol-function 'backpack--compile-pele-module)
-                              (lambda (_source) (error "synthetic compile failure")))
-                             ((symbol-function 'pele-download-module)
-                              (lambda () (error "synthetic download failure")))
-                             ((symbol-function 'display-warning)
-                              (lambda (&rest _args) nil))
-                             ((symbol-function 'message) (lambda (&rest _args) nil)))
-                     (should-error (backpack--prepare-pele-module))))
-                 runtime-dir))
-          (should (string-match-p "synthetic compile failure" (error-message-string err)))
-          (should (string-match-p "synthetic download failure" (error-message-string err))))
-      (delete-directory directory t))))
-
-(ert-deftest backpack-sync-pele-rejects-unsupported-platform-before-build ()
-  "Fail before activating or building Pele on unsupported platforms."
-  (let ((backpack--gear '(:editing mermaid))
-        (system-type 'windows-nt)
-        activate-count
-        build-count)
-    (cl-letf (((symbol-function 'backpack-sync-mode-p) (lambda () t))
-              ((symbol-function 'backpack--activate-package)
-               (lambda (_package) (cl-incf activate-count)))
-              ((symbol-function 'backpack--compile-pele-module)
-               (lambda (_source) (cl-incf build-count))))
-      (should-error (backpack--prepare-pele-module))
-      (should-not activate-count)
-      (should-not build-count))))
-
-(ert-deftest backpack-sync-pele-make-uses-current-emacs-and-captures-output ()
-  "Pass the running Emacs executable to make and retain its output."
-  (let* ((directory (make-temp-file "backpack-sync-pele-make-" t))
-         (module-file-suffix ".so")
-         (expected-emacs (expand-file-name invocation-name invocation-directory))
-         observed-args result)
-    (unwind-protect
-        (progn
-          (cl-letf (((symbol-function 'process-file)
-                     (lambda (program infile destination _display &rest args)
-                       (should (equal program "make"))
-                       (should-not infile)
-                       (should (eq destination t))
-                       (setq observed-args args)
-                       (insert "mock make output")
-                       0)))
-            (setq result (backpack--run-pele-make directory)))
-          (should (equal observed-args (list "-B" (concat "EMACS=" expected-emacs))))
-          (should (eql (plist-get result :status) 0))
-          (should (equal (plist-get result :output) "mock make output"))
-          (should (equal (plist-get result :module)
-                         (expand-file-name "pele-native.so" directory))))
-      (delete-directory directory t))))
-
 (defun backpack-sync-test--with-package-ref-state (function)
   "Call FUNCTION with a temporary Backpack package-ref state file."
   (let* ((directory (make-temp-file "backpack-sync-refs-" t))
@@ -323,14 +147,200 @@ Each spec has the form (ID RECIPE STATUS)."
                (cons id entry)))
            package-specs)))
 
+(ert-deftest backpack-sync-native-module-runner-builds-context-and-continues-per-entry ()
+  "Provide stable package context and run builders on each ensure pass."
+  (backpack-sync-test--with-package-ref-state
+   (lambda ()
+     (let* ((source-dir (make-temp-file "backpack-native-source-" t))
+            (build-dir (make-temp-file "backpack-native-build-" t))
+            (backpack--native-module-builders
+             '((native-demo . backpack-sync-test--native-builder)))
+            (backpack-sync-test--native-contexts nil)
+            (module-file-suffix ".so")
+            (continue-count 0)
+            (elpaca (backpack-sync-test--native-elpaca-entry
+                     'native-demo source-dir build-dir "pin-b")))
+       (unwind-protect
+           (progn
+             (backpack--package-ref-write-state
+              '((native-demo :old-ref "pin-zero" :ref "pin-a")))
+             (cl-letf (((symbol-function 'elpaca-note) (lambda (&rest _args) nil))
+                       ((symbol-function 'elpaca-continue)
+                        (lambda (_entry) (cl-incf continue-count))))
+               (backpack--native-module-build-step elpaca)
+               (backpack--native-module-build-step elpaca))
+             (should (= continue-count 2))
+             (should (= (length backpack-sync-test--native-contexts) 2))
+             (let ((context (car backpack-sync-test--native-contexts)))
+               (should (eq (plist-get context :package) 'native-demo))
+               (should (equal (plist-get context :source-dir) source-dir))
+               (should (equal (plist-get context :build-dir) build-dir))
+               (should (equal (plist-get context :module-file-suffix) ".so"))
+               (should (equal (plist-get context :emacs-version) emacs-version))
+               (should (eq (plist-get context :system-type) system-type))
+               (should (equal (plist-get context :old-ref) "pin-a"))
+               (should (equal (plist-get context :new-ref) "pin-b"))))
+         (delete-directory source-dir t)
+         (delete-directory build-dir t))))))
+
+(ert-deftest backpack-sync-native-module-builder-runs-while-activation-is-skipped ()
+  "Skip package activation during sync and still run the native builder."
+  (let* ((source-dir (make-temp-file "backpack-native-source-" t))
+         (build-dir (make-temp-file "backpack-native-build-" t))
+         (backpack--native-module-builders
+          '((native-demo . backpack-sync-test--native-builder)))
+         (backpack-sync-test--native-contexts nil)
+         (module-file-suffix ".so")
+         (continue-count 0)
+         activation-called
+         (elpaca (backpack-sync-test--native-elpaca-entry
+                  'native-demo source-dir build-dir "pin-a")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'backpack-sync-mode-p) (lambda () t))
+                  ((symbol-function 'elpaca-note) (lambda (&rest _args) nil))
+                  ((symbol-function 'elpaca-continue)
+                   (lambda (_entry) (cl-incf continue-count))))
+          (backpack--elpaca-skip-activate-in-sync
+           (lambda (_entry) (setq activation-called t)) elpaca)
+          (backpack--native-module-build-step elpaca)
+          (should-not activation-called)
+          (should (= continue-count 2))
+          (should (= (length backpack-sync-test--native-contexts) 1))
+          (should (eq (plist-get (car backpack-sync-test--native-contexts) :package)
+                      'native-demo)))
+      (delete-directory source-dir t)
+      (delete-directory build-dir t))))
+
+(ert-deftest backpack-sync-native-module-runner-fails-without-modules-or-on-builder-error ()
+  "Reject missing module support and propagate builder errors without continuing."
+  (backpack-sync-test--with-package-ref-state
+   (lambda ()
+     (let* ((source-dir (make-temp-file "backpack-native-source-" t))
+            (build-dir (make-temp-file "backpack-native-build-" t))
+            (backpack-sync-test--native-contexts nil)
+            (continue-count 0)
+            (elpaca (backpack-sync-test--native-elpaca-entry
+                     'native-demo source-dir build-dir "pin-a")))
+       (unwind-protect
+           (progn
+             (let ((backpack--native-module-builders
+                    '((native-demo . backpack-sync-test--native-builder)))
+                   (module-file-suffix nil))
+               (cl-letf (((symbol-function 'elpaca-note) (lambda (&rest _args) nil))
+                         ((symbol-function 'elpaca-continue)
+                          (lambda (_entry) (cl-incf continue-count))))
+                 (should-error (backpack--native-module-build-step elpaca)
+                               :type 'error)
+                 (should-not backpack-sync-test--native-contexts)
+                 (should (= continue-count 0))))
+             (let ((backpack--native-module-builders
+                    '((native-demo . backpack-sync-test--native-builder-fails)))
+                   (module-file-suffix ".so"))
+               (cl-letf (((symbol-function 'elpaca-note) (lambda (&rest _args) nil))
+                         ((symbol-function 'elpaca-continue)
+                          (lambda (_entry) (cl-incf continue-count))))
+                 (should-error (backpack--native-module-build-step elpaca)
+                               :type 'error)
+                 (should (= continue-count 0)))))
+         (delete-directory source-dir t)
+         (delete-directory build-dir t))))))
+
+(ert-deftest backpack-sync-native-module-error-fails-owning-elpaca-entry ()
+  "An error from the builder is reported against its package's Elpaca entry."
+  (backpack-sync-test--with-package-ref-state
+   (lambda ()
+     (let* ((source-dir (make-temp-file "backpack-native-source-" t))
+            (build-dir (make-temp-file "backpack-native-build-" t))
+            (entry (elpaca<--create
+                    :id 'native-demo :package "native-demo"
+                    :source-dir source-dir :build-dir build-dir
+                    :recipe '(:package "native-demo" :ref "pin-a")
+                    :build-steps (list #'backpack--native-module-build-step)
+                    :status 'queued))
+            (queue (elpaca-q<-create :elpacas (list (cons 'native-demo entry))))
+            (elpaca--queues (list queue))
+            (elpaca--status-subscribers (make-hash-table :test #'eq))
+            (backpack--native-module-builders
+             '((native-demo . backpack-sync-test--native-builder-fails)))
+            (module-file-suffix ".so")
+            failed-entry)
+       (unwind-protect
+           (progn
+             (cl-letf (((symbol-function 'elpaca-note) (lambda (&rest _args) nil))
+                       ((symbol-function 'elpaca--fail)
+                        (lambda (failed reason)
+                          (setq failed-entry failed)
+                          (setf (elpaca<-status failed) 'failed))))
+               (elpaca--process entry))
+             (should (eq failed-entry entry))
+             (should (eq (elpaca<-status entry) 'failed)))
+         (delete-directory source-dir t)
+         (delete-directory build-dir t))))))
+
+(ert-deftest backpack-process-call-wraps-elpaca-process-api ()
+  "Expose a normalized Backpack process result without leaking Elpaca's API."
+  (let ((directory (make-temp-file "backpack-process-call-" t))
+        observed)
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'elpaca-process-call)
+                     (lambda (program &rest args)
+                       (setq observed (list default-directory program args))
+                       (list 0 "stdout" "stderr"))))
+            (should (equal '(:status 0 :stdout "stdout" :stderr "stderr")
+                           (backpack-process-call directory "make" "target")))
+            (should (equal (list directory "make" '("target")) observed)))
+          (cl-letf (((symbol-function 'elpaca-process-call)
+                     (lambda (&rest _args) (error "synthetic process start failure"))))
+            (let ((result (backpack-process-call directory "missing-tool")))
+              (should-not (plist-get result :status))
+              (should (string-match-p "synthetic process start failure"
+                                      (plist-get result :stderr))))))
+      (delete-directory directory t))))
+
+(ert-deftest backpack-sync-native-module-step-preserves-build-rules-and-runs-last ()
+  "Append the native runner after custom steps in normal and pre-built lists."
+  (let ((backpack--native-module-builders
+         '((native-demo . backpack-sync-test--native-builder)))
+        (recipe '(:package "native-demo"
+                  :ref "pin-native-demo"
+                  :build (:before elpaca-build-link
+                                  backpack-sync-test--existing-build-step))))
+    (cl-letf (((symbol-function 'backpack-sync-mode-p) (lambda () t))
+              ((symbol-function 'backpack--ref-needs-update-p)
+               (lambda (&rest _args) nil)))
+      (let* ((modified (backpack--recipe-force-rebuild-on-ref-change recipe))
+             (rules (plist-get modified :build))
+             (normal-steps (elpaca-substitute-build-steps
+                            elpaca-default-build-steps rules))
+             (pre-built-steps (elpaca-substitute-build-steps
+                               elpaca--pre-built-steps rules)))
+        (should (memq 'backpack-sync-test--existing-build-step normal-steps))
+        (should (eq (car (last normal-steps))
+                    'backpack--native-module-build-step))
+        (should (eq (car (last pre-built-steps))
+                    'backpack--native-module-build-step)))
+      (cl-letf (((symbol-function 'backpack--ref-needs-update-p)
+                 (lambda (&rest _args) t)))
+        (let* ((modified (backpack--recipe-force-rebuild-on-ref-change recipe))
+               (rules (plist-get modified :build))
+               (steps (elpaca-substitute-build-steps
+                       elpaca-default-build-steps rules)))
+          (should (memq 'elpaca-git--fetch steps))
+          (should (memq 'backpack-sync-test--existing-build-step steps))
+          (should (eq (car (last steps))
+                      'backpack--native-module-build-step))))
+      (cl-letf (((symbol-function 'backpack-sync-mode-p) (lambda () nil)))
+        (should-not (backpack--recipe-force-rebuild-on-ref-change recipe))))))
+
 (ert-deftest backpack-sync-package-ref-first-install-records-nil-old-ref ()
   "Record a package's declared pin on its first successful install."
   (backpack-sync-test--with-package-ref-state
    (lambda ()
      (backpack--package-ref-record-queue
       (backpack-sync-test--ref-queue
-       '(vterm (:ref "pin-a") finished)))
-     (should (equal '((vterm :old-ref nil :ref "pin-a"))
+       '(test-package (:ref "pin-a") finished)))
+     (should (equal '((test-package :old-ref nil :ref "pin-a"))
                     (backpack--package-ref-read-state))))))
 
 (ert-deftest backpack-sync-package-ref-same-pin-does-not-rotate-history ()
@@ -339,11 +349,11 @@ Each spec has the form (ID RECIPE STATUS)."
    (lambda ()
      (backpack--package-ref-record-queue
       (backpack-sync-test--ref-queue
-       '(vterm (:ref "pin-a") finished)))
+       '(test-package (:ref "pin-a") finished)))
      (backpack--package-ref-record-queue
       (backpack-sync-test--ref-queue
-       '(vterm (:ref "pin-a") finished)))
-     (should (equal '((vterm :old-ref nil :ref "pin-a"))
+       '(test-package (:ref "pin-a") finished)))
+     (should (equal '((test-package :old-ref nil :ref "pin-a"))
                     (backpack--package-ref-read-state))))))
 
 (ert-deftest backpack-sync-package-ref-change-shifts-current-ref-to-old-ref ()
@@ -352,11 +362,11 @@ Each spec has the form (ID RECIPE STATUS)."
    (lambda ()
      (backpack--package-ref-record-queue
       (backpack-sync-test--ref-queue
-       '(vterm (:ref "pin-a") finished)))
+       '(test-package (:ref "pin-a") finished)))
      (backpack--package-ref-record-queue
       (backpack-sync-test--ref-queue
-       '(vterm (:ref "pin-b") finished)))
-     (should (equal '((vterm :old-ref "pin-a" :ref "pin-b"))
+       '(test-package (:ref "pin-b") finished)))
+     (should (equal '((test-package :old-ref "pin-a" :ref "pin-b"))
                     (backpack--package-ref-read-state))))))
 
 (ert-deftest backpack-sync-package-ref-failed-build-keeps-previous-pin ()
@@ -365,25 +375,11 @@ Each spec has the form (ID RECIPE STATUS)."
    (lambda ()
      (backpack--package-ref-record-queue
       (backpack-sync-test--ref-queue
-       '(vterm (:ref "pin-a") finished)))
+       '(test-package (:ref "pin-a") finished)))
      (backpack--package-ref-record-queue
       (backpack-sync-test--ref-queue
-       '(vterm (:ref "pin-b") failed)))
-     (should (equal '((vterm :old-ref nil :ref "pin-a"))
-                    (backpack--package-ref-read-state))))))
-
-(ert-deftest backpack-sync-package-ref-batch-records-only-finished-pinned-packages ()
-  "Record multiple successful refs in one queue and skip failures/unpinned entries."
-  (backpack-sync-test--with-package-ref-state
-   (lambda ()
-     (backpack--package-ref-record-queue
-      (backpack-sync-test--ref-queue
-       '(vterm (:ref "pin-vterm") finished)
-       '(pele (:ref "pin-pele") finished)
-       '(failed-package (:ref "pin-failed") failed)
-       '(unpinned (:branch "main") finished)))
-     (should (equal '((pele :old-ref nil :ref "pin-pele")
-                      (vterm :old-ref nil :ref "pin-vterm"))
+       '(test-package (:ref "pin-b") failed)))
+     (should (equal '((test-package :old-ref nil :ref "pin-a"))
                     (backpack--package-ref-read-state))))))
 
 (ert-deftest backpack-sync-package-ref-missing-or-corrupt-file-is-recoverable ()
@@ -396,8 +392,8 @@ Each spec has the form (ID RECIPE STATUS)."
      (should-not (backpack--package-ref-read-state))
      (backpack--package-ref-record-queue
       (backpack-sync-test--ref-queue
-       '(vterm (:ref "pin-a") finished)))
-     (should (equal '((vterm :old-ref nil :ref "pin-a"))
+       '(test-package (:ref "pin-a") finished)))
+     (should (equal '((test-package :old-ref nil :ref "pin-a"))
                     (backpack--package-ref-read-state))))))
 
 (ert-deftest backpack-sync-package-ref-recorder-registers-on-sync-queue-finish ()
@@ -417,18 +413,18 @@ Each spec has the form (ID RECIPE STATUS)."
   (backpack-sync-test--with-package-ref-state
    (lambda ()
      (backpack--package-ref-write-state
-      '((vterm :old-ref "pin-zero" :ref "pin-a")))
-     (let ((elpaca (elpaca<--create :id 'vterm
-                                    :package "vterm"
+      '((test-package :old-ref "pin-zero" :ref "pin-a")))
+     (let ((elpaca (elpaca<--create :id 'test-package
+                                    :package "test-package"
                                     :recipe '(:ref "pin-b"))))
        (should (equal '(:old-ref "pin-a" :new-ref "pin-b")
                       (backpack--package-ref-transition elpaca))))
-     (should (equal '((vterm :old-ref "pin-zero" :ref "pin-a"))
+     (should (equal '((test-package :old-ref "pin-zero" :ref "pin-a"))
                     (backpack--package-ref-read-state)))
      (backpack--package-ref-record-queue
       (backpack-sync-test--ref-queue
-       '(vterm (:ref "pin-b") finished)))
-     (should (equal '((vterm :old-ref "pin-a" :ref "pin-b"))
+       '(test-package (:ref "pin-b") finished)))
+     (should (equal '((test-package :old-ref "pin-a" :ref "pin-b"))
                     (backpack--package-ref-read-state))))))
 
 (provide 'backpack-sync-test)
