@@ -159,6 +159,11 @@ Each entry maps a language symbol to the git commit hash that was
 used to compile its grammar.  This allows `backpack ensure' to
 skip recompilation when the upstream grammar has not changed.")
 
+(defvar backpack--package-ref-state-file
+  (expand-file-name "package-refs.eld" backpack-state-dir)
+  "Single state file tracking declared refs for all Elpaca packages.
+Each entry maps a package symbol to a plist with :old-ref and :ref.")
+
 ;; These modules depend on directory variables defined above
 (require 'backpack-defaults)
 (require 'backpack-buffers)

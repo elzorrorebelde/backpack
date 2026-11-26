@@ -40,6 +40,9 @@
 (defvar backpack-user-dir nil
   "Location of the user's private configuration.")
 
+(defvar backpack--package-ref-state-file nil
+  "Single `.eld' state file containing refs for all Elpaca packages.")
+
 (require 'backpack-platform)
 (require 'subr-x)
 
@@ -241,6 +244,71 @@ In normal mode, this just loads elpaca if it's already built."
                          "Elpaca is not installed. Run 'backpack ensure' first."
                          :error))))))
 
+;;; Installed package ref registry
+
+(defun backpack--package-ref-read-state ()
+  "Read the single package-ref state file, or return nil when absent/invalid."
+  (when (and backpack--package-ref-state-file
+             (file-exists-p backpack--package-ref-state-file))
+    (condition-case nil
+        (with-temp-buffer
+          (insert-file-contents backpack--package-ref-state-file)
+          (let ((state (read (current-buffer))))
+            (when (and (proper-list-p state)
+                       (cl-every (lambda (entry)
+                                   (and (consp entry)
+                                        (symbolp (car entry))
+                                        (listp (cdr entry))))
+                                 state))
+              state)))
+      (error nil))))
+
+(defun backpack--package-ref-transition (elpaca)
+  "Return installed and requested refs for ELPACA before queue commit.
+The old ref comes from Backpack's state; the new ref comes from ELPACA's
+current recipe.  This is read-only: the queue finish hook commits the new
+ref only after the package succeeds."
+  (let* ((package (elpaca<-id elpaca))
+         (entry (assq package (backpack--package-ref-read-state)))
+         (installed-ref (plist-get (cdr entry) :ref))
+         (new-ref (plist-get (elpaca<-recipe elpaca) :ref)))
+    (list :old-ref installed-ref :new-ref new-ref)))
+
+(defun backpack--package-ref-write-state (state)
+  "Write all package refs in STATE to Backpack's single state file."
+  (unless backpack--package-ref-state-file
+    (error "Backpack package ref state file is not configured"))
+  (make-directory (file-name-directory backpack--package-ref-state-file) t)
+  (with-temp-file backpack--package-ref-state-file
+    (insert ";; -*- lisp-data -*-\n")
+    (insert ";; Declared package refs tracked by Backpack.\n")
+    (insert ";; Auto-generated -- do not edit.\n")
+    (prin1 state (current-buffer))
+    (insert "\n")))
+
+(defun backpack--package-ref-record-queue (queue)
+  "Record declared refs for successfully finished packages in QUEUE.
+Update the shared state file once after processing the whole queue."
+  (let ((state (backpack--package-ref-read-state))
+        changed)
+    (dolist (entry (elpaca-q<-elpacas queue))
+      (let* ((elpaca (cdr entry))
+             (package (elpaca<-id elpaca))
+             (ref (plist-get (elpaca<-recipe elpaca) :ref)))
+        (when (and (eq (elpaca<-status elpaca) 'finished)
+                   (symbolp package)
+                   (stringp ref)
+                   (not (string-empty-p ref)))
+          (let* ((record (assq package state))
+                 (installed-ref (plist-get (cdr record) :ref)))
+            (unless (equal ref installed-ref)
+              (if record
+                  (setcdr record (list :old-ref installed-ref :ref ref))
+                (push (cons package (list :old-ref nil :ref ref)) state))
+              (setq changed t))))))
+    (when changed
+      (backpack--package-ref-write-state state))))
+
 ;;; Package ref change detection
 
 (defun backpack--ref-needs-update-p (repo-dir requested-ref)
@@ -320,7 +388,8 @@ Returns a plist with :build set to activation-only steps for unbuilt packages."
     (cond
      ((backpack-sync-mode-p)
       (advice-add 'elpaca-activate :around #'backpack--elpaca-skip-activate-in-sync)
-      (add-to-list 'elpaca-recipe-functions #'backpack--recipe-force-rebuild-on-ref-change))
+      (add-to-list 'elpaca-recipe-functions #'backpack--recipe-force-rebuild-on-ref-change)
+      (add-hook 'elpaca-queue-finish-functions #'backpack--package-ref-record-queue))
      ((backpack-normal-mode-p)
       (add-to-list 'elpaca-recipe-functions #'backpack--recipe-skip-unbuilt-in-normal-mode)))))
 

@@ -254,7 +254,7 @@
                               (lambda (&rest _args) nil))
                              ((symbol-function 'message) (lambda (&rest _args) nil)))
                      (should-error (backpack--prepare-pele-module))))
-                  runtime-dir))
+                 runtime-dir))
           (should (string-match-p "synthetic compile failure" (error-message-string err)))
           (should (string-match-p "synthetic download failure" (error-message-string err))))
       (delete-directory directory t))))
@@ -297,6 +297,139 @@
           (should (equal (plist-get result :module)
                          (expand-file-name "pele-native.so" directory))))
       (delete-directory directory t))))
+
+(defun backpack-sync-test--with-package-ref-state (function)
+  "Call FUNCTION with a temporary Backpack package-ref state file."
+  (let* ((directory (make-temp-file "backpack-sync-refs-" t))
+         (backpack--package-ref-state-file
+          (expand-file-name "package-refs.eld" directory)))
+    (unwind-protect
+        (funcall function)
+      (delete-directory directory t))))
+
+(defun backpack-sync-test--ref-queue (&rest package-specs)
+  "Return an Elpaca queue containing PACKAGE-SPECS.
+Each spec has the form (ID RECIPE STATUS)."
+  (elpaca-q<-create
+   :elpacas
+   (mapcar (lambda (spec)
+             (let* ((id (nth 0 spec))
+                    (recipe (nth 1 spec))
+                    (status (nth 2 spec))
+                    (entry (elpaca<--create :id id
+                                            :package (symbol-name id)
+                                            :recipe recipe
+                                            :status status)))
+               (cons id entry)))
+           package-specs)))
+
+(ert-deftest backpack-sync-package-ref-first-install-records-nil-old-ref ()
+  "Record a package's declared pin on its first successful install."
+  (backpack-sync-test--with-package-ref-state
+   (lambda ()
+     (backpack--package-ref-record-queue
+      (backpack-sync-test--ref-queue
+       '(vterm (:ref "pin-a") finished)))
+     (should (equal '((vterm :old-ref nil :ref "pin-a"))
+                    (backpack--package-ref-read-state))))))
+
+(ert-deftest backpack-sync-package-ref-same-pin-does-not-rotate-history ()
+  "Keep the old-ref history unchanged when the declared pin is unchanged."
+  (backpack-sync-test--with-package-ref-state
+   (lambda ()
+     (backpack--package-ref-record-queue
+      (backpack-sync-test--ref-queue
+       '(vterm (:ref "pin-a") finished)))
+     (backpack--package-ref-record-queue
+      (backpack-sync-test--ref-queue
+       '(vterm (:ref "pin-a") finished)))
+     (should (equal '((vterm :old-ref nil :ref "pin-a"))
+                    (backpack--package-ref-read-state))))))
+
+(ert-deftest backpack-sync-package-ref-change-shifts-current-ref-to-old-ref ()
+  "Move the installed pin to :old-ref when a new pin finishes installing."
+  (backpack-sync-test--with-package-ref-state
+   (lambda ()
+     (backpack--package-ref-record-queue
+      (backpack-sync-test--ref-queue
+       '(vterm (:ref "pin-a") finished)))
+     (backpack--package-ref-record-queue
+      (backpack-sync-test--ref-queue
+       '(vterm (:ref "pin-b") finished)))
+     (should (equal '((vterm :old-ref "pin-a" :ref "pin-b"))
+                    (backpack--package-ref-read-state))))))
+
+(ert-deftest backpack-sync-package-ref-failed-build-keeps-previous-pin ()
+  "Do not record a new pin when Elpaca reports the package as failed."
+  (backpack-sync-test--with-package-ref-state
+   (lambda ()
+     (backpack--package-ref-record-queue
+      (backpack-sync-test--ref-queue
+       '(vterm (:ref "pin-a") finished)))
+     (backpack--package-ref-record-queue
+      (backpack-sync-test--ref-queue
+       '(vterm (:ref "pin-b") failed)))
+     (should (equal '((vterm :old-ref nil :ref "pin-a"))
+                    (backpack--package-ref-read-state))))))
+
+(ert-deftest backpack-sync-package-ref-batch-records-only-finished-pinned-packages ()
+  "Record multiple successful refs in one queue and skip failures/unpinned entries."
+  (backpack-sync-test--with-package-ref-state
+   (lambda ()
+     (backpack--package-ref-record-queue
+      (backpack-sync-test--ref-queue
+       '(vterm (:ref "pin-vterm") finished)
+       '(pele (:ref "pin-pele") finished)
+       '(failed-package (:ref "pin-failed") failed)
+       '(unpinned (:branch "main") finished)))
+     (should (equal '((pele :old-ref nil :ref "pin-pele")
+                      (vterm :old-ref nil :ref "pin-vterm"))
+                    (backpack--package-ref-read-state))))))
+
+(ert-deftest backpack-sync-package-ref-missing-or-corrupt-file-is-recoverable ()
+  "Treat a missing/corrupt state file as empty and rewrite it on success."
+  (backpack-sync-test--with-package-ref-state
+   (lambda ()
+     (should-not (backpack--package-ref-read-state))
+     (with-temp-file backpack--package-ref-state-file
+       (insert "("))
+     (should-not (backpack--package-ref-read-state))
+     (backpack--package-ref-record-queue
+      (backpack-sync-test--ref-queue
+       '(vterm (:ref "pin-a") finished)))
+     (should (equal '((vterm :old-ref nil :ref "pin-a"))
+                    (backpack--package-ref-read-state))))))
+
+(ert-deftest backpack-sync-package-ref-recorder-registers-on-sync-queue-finish ()
+  "Register the shared ref recorder as an Elpaca queue finish function in sync mode."
+  (let ((elpaca-recipe-functions nil)
+        (elpaca-queue-finish-functions nil))
+    (unwind-protect
+        (cl-letf (((symbol-function 'backpack-sync-mode-p) (lambda () t))
+                  ((symbol-function 'backpack-normal-mode-p) (lambda () nil)))
+          (backpack--setup-elpaca-for-mode)
+          (should (memq #'backpack--package-ref-record-queue
+                        elpaca-queue-finish-functions)))
+      (advice-remove 'elpaca-activate #'backpack--elpaca-skip-activate-in-sync))))
+
+(ert-deftest backpack-sync-package-ref-transition-uses-installed-ref-before-queue-commit ()
+  "Expose the installed pin and recipe pin without committing prematurely."
+  (backpack-sync-test--with-package-ref-state
+   (lambda ()
+     (backpack--package-ref-write-state
+      '((vterm :old-ref "pin-zero" :ref "pin-a")))
+     (let ((elpaca (elpaca<--create :id 'vterm
+                                    :package "vterm"
+                                    :recipe '(:ref "pin-b"))))
+       (should (equal '(:old-ref "pin-a" :new-ref "pin-b")
+                      (backpack--package-ref-transition elpaca))))
+     (should (equal '((vterm :old-ref "pin-zero" :ref "pin-a"))
+                    (backpack--package-ref-read-state)))
+     (backpack--package-ref-record-queue
+      (backpack-sync-test--ref-queue
+       '(vterm (:ref "pin-b") finished)))
+     (should (equal '((vterm :old-ref "pin-a" :ref "pin-b"))
+                    (backpack--package-ref-read-state))))))
 
 (provide 'backpack-sync-test)
 ;;; backpack-sync.el ends here
