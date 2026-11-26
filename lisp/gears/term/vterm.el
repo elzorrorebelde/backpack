@@ -1,9 +1,42 @@
 ;; -*- lexical-binding: t; -*-
 
+(defun gear--vterm-run-build-command (directory program &rest args)
+  "Run PROGRAM with ARGS in DIRECTORY and fail with its captured output."
+  (let ((result (apply #'backpack-process-call directory program args)))
+    (unless (eql (plist-get result :status) 0)
+      (error "vterm %s failed (status %s)\nstdout:\n%s\nstderr:\n%s"
+             program
+             (plist-get result :status)
+             (plist-get result :stdout)
+             (plist-get result :stderr)))
+    result))
+
 (defun gear--compile-vterm-native-module (context)
-  "Compile the native module for vterm"
-  ;; TODO: check if the refs are different and compile the module and put it where vterm package expects it
-  (error "not implemented"))
+  "Build vterm's native module from CONTEXT during `backpack ensure'."
+  (let* ((source-dir (plist-get context :source-dir))
+         (build-dir (plist-get context :build-dir))
+         (module-file-suffix (plist-get context :module-file-suffix))
+         (system-type (plist-get context :system-type))
+         (old-ref (plist-get context :old-ref))
+         (new-ref (plist-get context :new-ref))
+         (module-name (concat "vterm-module" module-file-suffix))
+         (module-source (expand-file-name module-name source-dir))
+         (module-destination (expand-file-name module-name build-dir))
+         (cmake-build-dir (expand-file-name "build" source-dir))
+         (cmake-args (and (boundp 'vterm-module-cmake-args)
+                          (stringp vterm-module-cmake-args)
+                          (split-string-and-unquote vterm-module-cmake-args))))
+    (when (memq system-type '(windows-nt ms-dos cygwin))
+      (error "vterm is not supported on Windows (current system: %s)" system-type))
+    (when (or (not (equal old-ref new-ref))
+              (not (file-exists-p module-destination)))
+      (make-directory cmake-build-dir t)
+      (apply #'gear--vterm-run-build-command
+             cmake-build-dir "cmake"
+             (append (list "-G" "Unix Makefiles") cmake-args (list "..")))
+      (gear--vterm-run-build-command cmake-build-dir "make")
+      (copy-file module-source module-destination t)
+      (message "Built vterm native module at %s" module-destination))))
 
 ;; -- Toggle & project helpers --
 

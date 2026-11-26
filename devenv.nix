@@ -116,7 +116,8 @@ in
     pkgs.glib
     pkgs.poppler
 
-    # Build Pele's native renderer during `backpack ensure` on NixOS.
+    # Build native modules for Pele and vterm during `backpack ensure`.
+    pkgs.cmake
     pkgs.gnumake
     pkgs.gcc
     pkgs.python3
