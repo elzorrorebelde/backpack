@@ -1,9 +1,31 @@
 ;; -*- lexical-binding: t; -*-
 
 (defun gear--compile-pele-native-module (context)
-    "Compile the native module provided by Pele.el"
-    ;; TODO: check if the refs are different and compile the module and put it where the package expects it
-    (error "not implemented"))
+  "Build and install Pele's native module from CONTEXT during `backpack ensure'."
+  (let* ((source-dir (plist-get context :source-dir))
+         (build-dir (plist-get context :build-dir))
+         (module-file-suffix (plist-get context :module-file-suffix))
+         (system-type (plist-get context :system-type))
+         (old-ref (plist-get context :old-ref))
+         (new-ref (plist-get context :new-ref))
+         (module-name (concat "pele-native" module-file-suffix))
+         (module-source (expand-file-name module-name source-dir))
+         (module-destination (expand-file-name module-name build-dir))
+         (emacs-executable (expand-file-name invocation-name invocation-directory)))
+    (unless (memq system-type '(darwin gnu/linux))
+      (error "Pele source builds support macOS and Linux only (current system: %s)"
+             system-type))
+    (when (or (not (equal old-ref new-ref))
+              (not (file-exists-p module-destination)))
+      (let ((result (backpack-process-call source-dir "make" "-B"
+                                           (concat "EMACS=" emacs-executable))))
+        (unless (eql (plist-get result :status) 0)
+          (error "Pele native module build failed (status %s)\nstdout:\n%s\nstderr:\n%s"
+                 (plist-get result :status)
+                 (plist-get result :stdout)
+                 (plist-get result :stderr)))
+        (copy-file module-source module-destination t)
+        (message "Built Pele native module at %s" module-destination)))))
 
 (leaf pele
   :doc "edit Mermaid diagrams and preview SVGs; the native renderer is provisioned by backpack ensure"
